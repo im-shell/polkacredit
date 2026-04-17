@@ -1,0 +1,494 @@
+{
+  "_format": "hh-sol-cache-2",
+  "files": {
+    "/Users/sameerkumar/Code/polkadot/polkacredit/contracts/contracts/DisputeResolver.sol": {
+      "lastModificationDate": 1776447641128,
+      "contentHash": "ce2a95e26d3053895bfb7a782f197230",
+      "sourceName": "contracts/DisputeResolver.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "./interfaces/IScoreRegistry.sol",
+        "./lib/Merkle.sol",
+        "./lib/ScoreMath.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.24"
+      ],
+      "artifacts": [
+        "DisputeResolver",
+        "IERC20D"
+      ]
+    },
+    "/Users/sameerkumar/Code/polkadot/polkacredit/contracts/contracts/interfaces/IScoreRegistry.sol": {
+      "lastModificationDate": 1776447542222,
+      "contentHash": "a8182075e3d7d1a3412b458a766a000e",
+      "sourceName": "contracts/interfaces/IScoreRegistry.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.24"
+      ],
+      "artifacts": [
+        "IScoreRegistry"
+      ]
+    },
+    "/Users/sameerkumar/Code/polkadot/polkacredit/contracts/contracts/lib/Merkle.sol": {
+      "lastModificationDate": 1776447550417,
+      "contentHash": "a6889cebfda6bd5c2eb0431f3bb0431a",
+      "sourceName": "contracts/lib/Merkle.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.24"
+      ],
+      "artifacts": [
+        "Merkle"
+      ]
+    },
+    "/Users/sameerkumar/Code/polkadot/polkacredit/contracts/contracts/lib/ScoreMath.sol": {
+      "lastModificationDate": 1776447558168,
+      "contentHash": "e8c416d9488beff739dcbf76319eba7e",
+      "sourceName": "contracts/lib/ScoreMath.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.24"
+      ],
+      "artifacts": [
+        "ScoreMath"
+      ]
+    },
+    "/Users/sameerkumar/Code/polkadot/polkacredit/contracts/contracts/ScoreRegistry.sol": {
+      "lastModificationDate": 1776447596131,
+      "contentHash": "b856b3c8a2c9daab1c2c7339b8835345",
+      "sourceName": "contracts/ScoreRegistry.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "./interfaces/IScoreRegistry.sol",
+        "./lib/ScoreMath.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.24"
+      ],
+      "artifacts": [
+        "ScoreRegistry"
+      ]
+    },
+    "/Users/sameerkumar/Code/polkadot/polkacredit/contracts/contracts/MockStablecoin.sol": {
+      "lastModificationDate": 1776352632337,
+      "contentHash": "3fb6e403441e5d93e20c0970c229c5d0",
+      "sourceName": "contracts/MockStablecoin.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.24"
+      ],
+      "artifacts": [
+        "MockStablecoin"
+      ]
+    },
+    "/Users/sameerkumar/Code/polkadot/polkacredit/contracts/contracts/PointsLedger.sol": {
+      "lastModificationDate": 1776411755221,
+      "contentHash": "d425cda8ccb9020b7c136051457aacd6",
+      "sourceName": "contracts/PointsLedger.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "./interfaces/IPointsLedger.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.24"
+      ],
+      "artifacts": [
+        "PointsLedger"
+      ]
+    },
+    "/Users/sameerkumar/Code/polkadot/polkacredit/contracts/contracts/interfaces/IPointsLedger.sol": {
+      "lastModificationDate": 1776411755220,
+      "contentHash": "012b9e1a8ef922c4bcfa775d264b7bf3",
+      "sourceName": "contracts/interfaces/IPointsLedger.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.24"
+      ],
+      "artifacts": [
+        "IPointsLedger"
+      ]
+    },
+    "/Users/sameerkumar/Code/polkadot/polkacredit/contracts/contracts/VouchRegistry.sol": {
+      "lastModificationDate": 1776411755221,
+      "contentHash": "cc40f1f92c29df30a544d1c9bea4ea57",
+      "sourceName": "contracts/VouchRegistry.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "./interfaces/IPointsLedger.sol",
+        "./interfaces/IStakingVault.sol",
+        "./lib/PopId.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.24"
+      ],
+      "artifacts": [
+        "VouchRegistry"
+      ]
+    },
+    "/Users/sameerkumar/Code/polkadot/polkacredit/contracts/contracts/interfaces/IStakingVault.sol": {
+      "lastModificationDate": 1776352434343,
+      "contentHash": "5c07152b82bd8ea3afa2385d0f8fb07f",
+      "sourceName": "contracts/interfaces/IStakingVault.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.24"
+      ],
+      "artifacts": [
+        "IStakingVault"
+      ]
+    },
+    "/Users/sameerkumar/Code/polkadot/polkacredit/contracts/contracts/lib/PopId.sol": {
+      "lastModificationDate": 1776353732983,
+      "contentHash": "6ee2137c94bb66462ce4c469bf9fb992",
+      "sourceName": "contracts/lib/PopId.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.24"
+      ],
+      "artifacts": [
+        "PopId"
+      ]
+    },
+    "/Users/sameerkumar/Code/polkadot/polkacredit/contracts/contracts/WalletRegistry.sol": {
+      "lastModificationDate": 1776411755221,
+      "contentHash": "335be4abc38830ce73ecd892fdffc73d",
+      "sourceName": "contracts/WalletRegistry.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "./lib/PopId.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.24"
+      ],
+      "artifacts": [
+        "WalletRegistry"
+      ]
+    },
+    "/Users/sameerkumar/Code/polkadot/polkacredit/contracts/contracts/StakingVault.sol": {
+      "lastModificationDate": 1776411755220,
+      "contentHash": "34f6fad0e71dc8eb7d64df93fb6c407b",
+      "sourceName": "contracts/StakingVault.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "./interfaces/IPointsLedger.sol",
+        "./interfaces/IStakingVault.sol",
+        "./lib/PopId.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.24"
+      ],
+      "artifacts": [
+        "IERC20",
+        "StakingVault"
+      ]
+    }
+  }
+}

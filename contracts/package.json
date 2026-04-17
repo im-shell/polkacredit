@@ -1,0 +1,26 @@
+{
+  "name": "polkacredit-contracts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Solidity contracts for the PolkaCredit on-chain credit scoring system.",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "node": "hardhat node",
+    "deploy:local": "hardhat run scripts/deploy.ts --network localhost",
+    "deploy:moonbase": "hardhat run scripts/deploy.ts --network moonbase",
+    "clean": "hardhat clean"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@types/chai": "^4.3.11",
+    "@types/mocha": "^10.0.6",
+    "@types/node": "^20.11.0",
+    "chai": "^4.4.1",
+    "dotenv": "^16.4.5",
+    "ethers": "^6.11.0",
+    "hardhat": "^2.22.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  }
+}

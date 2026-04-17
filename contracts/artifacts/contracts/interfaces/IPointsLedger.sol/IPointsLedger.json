@@ -1,0 +1,206 @@
+{
+  "_format": "hh-sol-artifact-1",
+  "contractName": "IPointsLedger",
+  "sourceName": "contracts/interfaces/IPointsLedger.sol",
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "popId",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "uint64",
+          "name": "amount",
+          "type": "uint64"
+        },
+        {
+          "internalType": "uint64",
+          "name": "vouchId",
+          "type": "uint64"
+        }
+      ],
+      "name": "burnLockedPoints",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "popId",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "uint64",
+          "name": "amount",
+          "type": "uint64"
+        },
+        {
+          "internalType": "string",
+          "name": "reason",
+          "type": "string"
+        }
+      ],
+      "name": "burnPoints",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "popId",
+          "type": "bytes32"
+        }
+      ],
+      "name": "getBalance",
+      "outputs": [
+        {
+          "components": [
+            {
+              "internalType": "int64",
+              "name": "total",
+              "type": "int64"
+            },
+            {
+              "internalType": "uint64",
+              "name": "earned",
+              "type": "uint64"
+            },
+            {
+              "internalType": "uint64",
+              "name": "burned",
+              "type": "uint64"
+            },
+            {
+              "internalType": "uint64",
+              "name": "locked",
+              "type": "uint64"
+            },
+            {
+              "internalType": "int64",
+              "name": "available",
+              "type": "int64"
+            },
+            {
+              "internalType": "uint64",
+              "name": "lastUpdated",
+              "type": "uint64"
+            }
+          ],
+          "internalType": "struct IPointsLedger.PointsBalance",
+          "name": "",
+          "type": "tuple"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "popId",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "uint64",
+          "name": "fromBlock",
+          "type": "uint64"
+        },
+        {
+          "internalType": "uint64",
+          "name": "toBlock",
+          "type": "uint64"
+        }
+      ],
+      "name": "getPointsEarnedInWindow",
+      "outputs": [
+        {
+          "internalType": "uint64",
+          "name": "",
+          "type": "uint64"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "popId",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "uint64",
+          "name": "amount",
+          "type": "uint64"
+        },
+        {
+          "internalType": "uint64",
+          "name": "vouchId",
+          "type": "uint64"
+        }
+      ],
+      "name": "lockPoints",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "popId",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "uint64",
+          "name": "amount",
+          "type": "uint64"
+        },
+        {
+          "internalType": "string",
+          "name": "reason",
+          "type": "string"
+        }
+      ],
+      "name": "mintPoints",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "popId",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "uint64",
+          "name": "amount",
+          "type": "uint64"
+        },
+        {
+          "internalType": "uint64",
+          "name": "vouchId",
+          "type": "uint64"
+        }
+      ],
+      "name": "unlockPoints",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x",
+  "deployedBytecode": "0x",
+  "linkReferences": {},
+  "deployedLinkReferences": {}
+}
