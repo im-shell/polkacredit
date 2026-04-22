@@ -67,7 +67,7 @@ async function main() {
 
   const vault = await hre.viem.deployContract(
     "StakingVault",
-    [deployer, stable.address, ledger.address, 18],
+    [deployer, stable.address, ledger.address, treasury, 18],
     { client },
   );
   console.log(`StakingVault     : ${vault.address}`);
