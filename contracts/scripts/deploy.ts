@@ -1,110 +1,148 @@
-import { ethers } from "hardhat";
+import hre from "hardhat";
 import * as fs from "fs";
 import * as path from "path";
+import { getAddress, type Chain } from "viem";
+
+const DEPLOYMENTS_DIR = path.resolve(__dirname, "../deployments");
+
+type Deployed = {
+  chainId: number;
+  network: string;
+  deployer: `0x${string}`;
+  indexer: `0x${string}`;
+  treasury: `0x${string}`;
+  rpcUrl: string;
+  contracts: {
+    MockStablecoin: `0x${string}`;
+    PointsLedger: `0x${string}`;
+    StakingVault: `0x${string}`;
+    VouchRegistry: `0x${string}`;
+    ScoreRegistry: `0x${string}`;
+    DisputeResolver: `0x${string}`;
+  };
+};
+
+function writeDeployment(d: Deployed) {
+  if (!fs.existsSync(DEPLOYMENTS_DIR)) {
+    fs.mkdirSync(DEPLOYMENTS_DIR, { recursive: true });
+  }
+  const file = path.join(DEPLOYMENTS_DIR, `${d.chainId}.json`);
+  fs.writeFileSync(file, JSON.stringify(d, null, 2) + "\n");
+  console.log(`Wrote ${file}`);
+}
 
 async function main() {
-  const [deployer] = await ethers.getSigners();
-  console.log(`Deploying PolkaCredit from ${deployer.address}`);
-  console.log(
-    `Balance: ${ethers.formatEther(await ethers.provider.getBalance(deployer.address))} native`
-  );
-
-  // Indexer signer — for testnets, read from env; falls back to deployer.
-  const indexerAddr = process.env.INDEXER_ADDRESS ?? deployer.address;
-
-  // 1. Stablecoin (mock; on testnet prefer a real USDC-like)
-  const Stable = await ethers.getContractFactory("MockStablecoin");
-  const stable = await Stable.deploy();
-  await stable.waitForDeployment();
-  console.log(`MockStablecoin       → ${await stable.getAddress()}`);
-
-  // 2. Points ledger
-  const Ledger = await ethers.getContractFactory("PointsLedger");
-  const ledger = await Ledger.deploy(deployer.address);
-  await ledger.waitForDeployment();
-  console.log(`PointsLedger         → ${await ledger.getAddress()}`);
-
-  // 3. Staking vault
-  const Vault = await ethers.getContractFactory("StakingVault");
-  const vault = await Vault.deploy(
-    deployer.address,
-    await stable.getAddress(),
-    await ledger.getAddress()
-  );
-  await vault.waitForDeployment();
-  console.log(`StakingVault         → ${await vault.getAddress()}`);
-
-  // 4. Vouch registry
-  const Vouch = await ethers.getContractFactory("VouchRegistry");
-  const vouch = await Vouch.deploy(
-    deployer.address,
-    await ledger.getAddress(),
-    await vault.getAddress()
-  );
-  await vouch.waitForDeployment();
-  console.log(`VouchRegistry        → ${await vouch.getAddress()}`);
-
-  // 5. Score registry
-  const Score = await ethers.getContractFactory("ScoreRegistry");
-  const score = await Score.deploy(deployer.address, indexerAddr);
-  await score.waitForDeployment();
-  console.log(`ScoreRegistry        → ${await score.getAddress()}`);
-
-  // 6. Wallet registry
-  const Wallet = await ethers.getContractFactory("WalletRegistry");
-  const wallet = await Wallet.deploy(deployer.address);
-  await wallet.waitForDeployment();
-  console.log(`WalletRegistry       → ${await wallet.getAddress()}`);
-
-  // 7. Dispute resolver (treasury defaults to deployer for MVP)
-  const Dispute = await ethers.getContractFactory("DisputeResolver");
-  const dispute = await Dispute.deploy(
-    deployer.address,
-    await score.getAddress(),
-    await stable.getAddress(),
-    deployer.address
-  );
-  await dispute.waitForDeployment();
-  console.log(`DisputeResolver      → ${await dispute.getAddress()}`);
-
-  // ─── Wire up authorizations ───
-  console.log("\nWiring permissions...");
-  await (await ledger.setAuthorized(await vault.getAddress(), true)).wait();
-  await (await ledger.setAuthorized(await vouch.getAddress(), true)).wait();
-  await (await ledger.setAuthorized(indexerAddr, true)).wait();
-  await (await vault.setVouchRegistry(await vouch.getAddress())).wait();
-  await (await vouch.setDefaultReporter(indexerAddr)).wait();
-  await (await score.setDisputeResolver(await dispute.getAddress())).wait();
-  console.log("  ✔ PointsLedger: StakingVault, VouchRegistry, Indexer authorized");
-  console.log("  ✔ StakingVault: VouchRegistry set");
-  console.log("  ✔ VouchRegistry: defaultReporter set to indexer");
-  console.log("  ✔ ScoreRegistry: DisputeResolver wired");
-
-  // ─── Persist deployed addresses ───
-  const deployment = {
-    chainId: Number((await ethers.provider.getNetwork()).chainId),
-    deployer: deployer.address,
-    indexer: indexerAddr,
-    contracts: {
-      MockStablecoin: await stable.getAddress(),
-      PointsLedger: await ledger.getAddress(),
-      StakingVault: await vault.getAddress(),
-      VouchRegistry: await vouch.getAddress(),
-      ScoreRegistry: await score.getAddress(),
-      WalletRegistry: await wallet.getAddress(),
-      DisputeResolver: await dispute.getAddress(),
-    },
-    deployedAt: new Date().toISOString(),
+  // hardhat-viem looks up the chain by id in viem's built-in `viem/chains`.
+  // Paseo/Polkadot Hub aren't there, so we synthesize a Chain from network config
+  // and pass it (and the resulting clients) into every getter + deployContract call.
+  const netCfg = hre.network.config as { url?: string; chainId?: number };
+  const rawChainId =
+    netCfg.chainId ?? Number(await hre.network.provider.send("eth_chainId"));
+  const chain: Chain = {
+    id: rawChainId,
+    name: hre.network.name,
+    nativeCurrency: { name: "PAS", symbol: "PAS", decimals: 18 },
+    rpcUrls: { default: { http: [netCfg.url ?? ""] } },
   };
 
-  const outDir = path.join(__dirname, "..", "deployments");
-  fs.mkdirSync(outDir, { recursive: true });
-  const outFile = path.join(outDir, `${deployment.chainId}.json`);
-  fs.writeFileSync(outFile, JSON.stringify(deployment, null, 2));
-  console.log(`\nAddresses written to ${outFile}`);
+  const [wallet] = await hre.viem.getWalletClients({ chain });
+  const publicClient = await hre.viem.getPublicClient({ chain });
+  const client = { public: publicClient, wallet } as const;
+
+  const deployer = getAddress(wallet.account.address);
+  const indexer = getAddress(process.env.INDEXER_ADDRESS ?? deployer);
+  const treasury = getAddress(process.env.TREASURY_ADDRESS ?? deployer);
+  const chainId = await publicClient.getChainId();
+
+  console.log(`Network      : ${hre.network.name} (chainId ${chainId})`);
+  console.log(`Deployer     : ${deployer}`);
+  console.log(`Indexer      : ${indexer}`);
+  console.log(`Treasury     : ${treasury}`);
+
+  const stable = await hre.viem.deployContract("MockStablecoin", [], { client });
+  console.log(`MockStablecoin   : ${stable.address}`);
+
+  const ledger = await hre.viem.deployContract("PointsLedger", [deployer], { client });
+  console.log(`PointsLedger     : ${ledger.address}`);
+
+  const vault = await hre.viem.deployContract(
+    "StakingVault",
+    [deployer, stable.address, ledger.address, 18],
+    { client },
+  );
+  console.log(`StakingVault     : ${vault.address}`);
+
+  const vouch = await hre.viem.deployContract(
+    "VouchRegistry",
+    [deployer, ledger.address, vault.address],
+    { client },
+  );
+  console.log(`VouchRegistry    : ${vouch.address}`);
+
+  const score = await hre.viem.deployContract(
+    "ScoreRegistry",
+    [deployer, indexer],
+    { client },
+  );
+  console.log(`ScoreRegistry    : ${score.address}`);
+
+  const dispute = await hre.viem.deployContract(
+    "DisputeResolver",
+    [deployer, score.address, ledger.address, stable.address, treasury, 18],
+    { client },
+  );
+  console.log(`DisputeResolver  : ${dispute.address}`);
+
+  console.log("Wiring permissions...");
+  // pallet-revive's tx pool rejects rapid same-sender submissions with
+  // "Priority is too low". Send each tx and wait for its receipt before the next.
+  const send = async (
+    label: string,
+    submit: () => Promise<`0x${string}`>,
+  ) => {
+    const hash = await submit();
+    await publicClient.waitForTransactionReceipt({ hash, timeout: 180_000 });
+    console.log(`  ${label} ✓`);
+  };
+
+  await send("ledger.setAuthorized(vault)", () =>
+    ledger.write.setAuthorized([vault.address, true]),
+  );
+  await send("ledger.setAuthorized(vouch)", () =>
+    ledger.write.setAuthorized([vouch.address, true]),
+  );
+  await send("ledger.setAuthorized(indexer)", () =>
+    ledger.write.setAuthorized([indexer, true]),
+  );
+  await send("vault.setVouchRegistry", () =>
+    vault.write.setVouchRegistry([vouch.address]),
+  );
+  await send("vouch.setDefaultReporter", () =>
+    vouch.write.setDefaultReporter([indexer]),
+  );
+  await send("score.setDisputeResolver", () =>
+    score.write.setDisputeResolver([dispute.address]),
+  );
+
+  writeDeployment({
+    chainId,
+    network: hre.network.name,
+    deployer,
+    indexer,
+    treasury,
+    rpcUrl: (hre.network.config as { url?: string }).url ?? "",
+    contracts: {
+      MockStablecoin: stable.address,
+      PointsLedger: ledger.address,
+      StakingVault: vault.address,
+      VouchRegistry: vouch.address,
+      ScoreRegistry: score.address,
+      DisputeResolver: dispute.address,
+    },
+  });
 }
 
 main().catch((err) => {
   console.error(err);
-  process.exit(1);
+  process.exitCode = 1;
 });

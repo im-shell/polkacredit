@@ -1,13 +1,25 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
+pragma solidity 0.8.30;
+
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
 import {IPointsLedger} from "./interfaces/IPointsLedger.sol";
 
 /// @title PointsLedger
-/// @notice Soulbound, per-PoP points accounting. Mint and burn only.
-/// @dev All mutations go through authorized contracts (VouchRegistry,
-///      ScoreRegistry) or the Indexer. Points are non-transferable.
-contract PointsLedger is IPointsLedger {
+/// @notice Soulbound, per-account points accounting. Mint and burn only.
+/// @dev All mutations go through holders of `WRITER_ROLE` (typically the
+///      StakingVault, VouchRegistry, and the indexer signer). Points are
+///      non-transferable.
+contract PointsLedger is IPointsLedger, AccessControl {
+    error ZeroAddress();
+    error ZeroAmount();
+    error ZeroVouchId();
+    error InsufficientAvailable();
+    error NotEnoughLocked();
+
+    /// @notice Role granted to contracts/EOAs that can mint/burn/lock points.
+    bytes32 public constant WRITER_ROLE = keccak256("PolkaCredit.WRITER_ROLE");
+
     struct PointEvent {
         int64 amount; // positive = mint, negative = burn, 0 = marker
         uint64 timestamp; // block number
@@ -15,122 +27,111 @@ contract PointsLedger is IPointsLedger {
         string reason;
     }
 
-    address public admin;
+    mapping(address => PointsBalance) private _balances;
+    mapping(address => PointEvent[]) private _history;
 
-    /// @notice Addresses allowed to mint/burn/lock. Typically VouchRegistry,
-    /// ScoreRegistry, and the indexer signer.
-    mapping(address => bool) public authorized;
+    /// @notice Locked points per (account, vouchId). Sum mirrors balance.locked.
+    mapping(address => mapping(uint64 => uint64)) public lockedPoints;
 
-    mapping(bytes32 => PointsBalance) private _balances;
-    mapping(bytes32 => PointEvent[]) private _history;
-
-    /// @notice Locked points per (popId, vouchId). Sum is mirrored in balance.locked.
-    mapping(bytes32 => mapping(uint64 => uint64)) public lockedPoints;
-
-    event PointsMinted(bytes32 indexed popId, uint64 amount, string reason);
-    event PointsBurned(bytes32 indexed popId, uint64 amount, string reason);
-    event PointsLocked(bytes32 indexed popId, uint64 amount, uint64 indexed vouchId);
-    event PointsUnlocked(bytes32 indexed popId, uint64 amount, uint64 indexed vouchId);
+    event PointsMinted(address indexed account, uint64 amount, string reason);
+    event PointsBurned(address indexed account, uint64 amount, string reason);
+    event PointsLocked(address indexed account, uint64 amount, uint64 indexed vouchId);
+    event PointsUnlocked(address indexed account, uint64 amount, uint64 indexed vouchId);
     event AuthorizedSet(address indexed who, bool enabled);
 
-    modifier onlyAdmin() {
-        require(msg.sender == admin, "PointsLedger: not admin");
-        _;
+    constructor(address admin) {
+        if (admin == address(0)) revert ZeroAddress();
+        _grantRole(DEFAULT_ADMIN_ROLE, admin);
     }
 
-    modifier onlyAuthorized() {
-        require(authorized[msg.sender], "PointsLedger: not authorized");
-        _;
-    }
-
-    constructor(address _admin) {
-        require(_admin != address(0), "PointsLedger: zero admin");
-        admin = _admin;
-    }
-
-    function setAuthorized(address who, bool enabled) external onlyAdmin {
-        authorized[who] = enabled;
+    /// @notice Back-compat wrapper over `grantRole`/`revokeRole` for WRITER_ROLE.
+    function setAuthorized(address who, bool enabled) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (who == address(0)) revert ZeroAddress();
+        if (enabled) _grantRole(WRITER_ROLE, who);
+        else _revokeRole(WRITER_ROLE, who);
         emit AuthorizedSet(who, enabled);
     }
 
-    function transferAdmin(address newAdmin) external onlyAdmin {
-        require(newAdmin != address(0), "PointsLedger: zero admin");
-        admin = newAdmin;
+    /// @notice Preserves the pre-AccessControl API shape.
+    function authorized(address who) external view returns (bool) {
+        return hasRole(WRITER_ROLE, who);
     }
 
     // ─────────────────────── Core mint / burn ───────────────────────
 
-    function mintPoints(bytes32 popId, uint64 amount, string calldata reason) external onlyAuthorized {
-        require(popId != bytes32(0), "PointsLedger: zero popId");
-        require(amount > 0, "PointsLedger: zero amount");
+    function mintPoints(address account, uint64 amount, string calldata reason) external onlyRole(WRITER_ROLE) {
+        if (account == address(0)) revert ZeroAddress();
+        if (amount == 0) revert ZeroAmount();
 
-        PointsBalance storage b = _balances[popId];
+        PointsBalance storage b = _balances[account];
         b.total += int64(amount);
         b.earned += amount;
         b.available += int64(amount);
         b.lastUpdated = uint64(block.number);
 
-        _history[popId].push(
+        _history[account].push(
             PointEvent({amount: int64(amount), timestamp: uint64(block.number), relatedVouchId: 0, reason: reason})
         );
-        emit PointsMinted(popId, amount, reason);
+        emit PointsMinted(account, amount, reason);
     }
 
-    function burnPoints(bytes32 popId, uint64 amount, string calldata reason) external onlyAuthorized {
-        require(popId != bytes32(0), "PointsLedger: zero popId");
-        require(amount > 0, "PointsLedger: zero amount");
+    function burnPoints(address account, uint64 amount, string calldata reason) external onlyRole(WRITER_ROLE) {
+        if (account == address(0)) revert ZeroAddress();
+        if (amount == 0) revert ZeroAmount();
 
-        PointsBalance storage b = _balances[popId];
+        PointsBalance storage b = _balances[account];
         b.total -= int64(amount);
         b.burned += amount;
         b.available -= int64(amount);
         b.lastUpdated = uint64(block.number);
 
-        _history[popId].push(
+        _history[account].push(
             PointEvent({amount: -int64(amount), timestamp: uint64(block.number), relatedVouchId: 0, reason: reason})
         );
-        emit PointsBurned(popId, amount, reason);
+        emit PointsBurned(account, amount, reason);
     }
 
     // ─────────────────────── Vouch lock / unlock ───────────────────────
 
-    function lockPoints(bytes32 popId, uint64 amount, uint64 vouchId) external onlyAuthorized {
-        require(popId != bytes32(0), "PointsLedger: zero popId");
-        require(vouchId != 0, "PointsLedger: zero vouchId");
-        PointsBalance storage b = _balances[popId];
-        require(b.available >= int64(amount), "PointsLedger: insufficient available");
+    function lockPoints(address account, uint64 amount, uint64 vouchId) external onlyRole(WRITER_ROLE) {
+        if (account == address(0)) revert ZeroAddress();
+        if (vouchId == 0) revert ZeroVouchId();
+
+        PointsBalance storage b = _balances[account];
+        if (b.available < int64(amount)) revert InsufficientAvailable();
 
         b.locked += amount;
         b.available -= int64(amount);
         b.lastUpdated = uint64(block.number);
 
-        lockedPoints[popId][vouchId] += amount;
-        emit PointsLocked(popId, amount, vouchId);
+        lockedPoints[account][vouchId] += amount;
+        emit PointsLocked(account, amount, vouchId);
     }
 
-    function unlockPoints(bytes32 popId, uint64 amount, uint64 vouchId) external onlyAuthorized {
-        require(lockedPoints[popId][vouchId] >= amount, "PointsLedger: not enough locked");
+    function unlockPoints(address account, uint64 amount, uint64 vouchId) external onlyRole(WRITER_ROLE) {
+        if (lockedPoints[account][vouchId] < amount) revert NotEnoughLocked();
 
-        PointsBalance storage b = _balances[popId];
+        PointsBalance storage b = _balances[account];
         b.locked -= amount;
         b.available += int64(amount);
         b.lastUpdated = uint64(block.number);
 
-        lockedPoints[popId][vouchId] -= amount;
-        emit PointsUnlocked(popId, amount, vouchId);
+        lockedPoints[account][vouchId] -= amount;
+        emit PointsUnlocked(account, amount, vouchId);
     }
 
     /// @notice Burn `amount` points. The locked-for-vouchId portion is burned
-    /// first; if amount > locked, the excess is burned from the available balance
-    /// (this is the "penalty" mechanic).
-    function burnLockedPoints(bytes32 popId, uint64 amount, uint64 vouchId) external onlyAuthorized {
-        PointsBalance storage b = _balances[popId];
-        uint64 currentLocked = lockedPoints[popId][vouchId];
+    ///         first; if amount > locked, the excess comes out of available.
+    function burnLockedPoints(address account, uint64 amount, uint64 vouchId) external onlyRole(WRITER_ROLE) {
+        if (amount == 0) revert ZeroAmount();
+
+        PointsBalance storage b = _balances[account];
+        uint64 currentLocked = lockedPoints[account][vouchId];
         uint64 lockedPortion = amount > currentLocked ? currentLocked : amount;
 
         if (lockedPortion > 0) {
             b.locked -= lockedPortion;
-            lockedPoints[popId][vouchId] -= lockedPortion;
+            lockedPoints[account][vouchId] -= lockedPortion;
         }
 
         b.total -= int64(amount);
@@ -140,7 +141,7 @@ contract PointsLedger is IPointsLedger {
         }
         b.lastUpdated = uint64(block.number);
 
-        _history[popId].push(
+        _history[account].push(
             PointEvent({
                 amount: -int64(amount),
                 timestamp: uint64(block.number),
@@ -148,36 +149,65 @@ contract PointsLedger is IPointsLedger {
                 reason: "vouch_penalty"
             })
         );
-        emit PointsBurned(popId, amount, "vouch_penalty");
+        emit PointsBurned(account, amount, "vouch_penalty");
     }
 
     // ─────────────────────── Views ───────────────────────
 
-    function getBalance(bytes32 popId) external view returns (PointsBalance memory) {
-        return _balances[popId];
+    function getBalance(address account) external view returns (PointsBalance memory) {
+        return _balances[account];
     }
 
-    function historyLength(bytes32 popId) external view returns (uint256) {
-        return _history[popId].length;
+    function historyLength(address account) external view returns (uint256) {
+        return _history[account].length;
     }
 
-    function historyAt(bytes32 popId, uint256 idx) external view returns (PointEvent memory) {
-        return _history[popId][idx];
+    function historyAt(address account, uint256 idx) external view returns (PointEvent memory) {
+        return _history[account][idx];
     }
 
-    /// @notice Sum positive point events for a popId within [fromBlock, toBlock].
-    /// Skips events labelled "vouched_for" — only self-earned points count.
-    /// O(history length); keep windows short or paginate off-chain.
-    function getPointsEarnedInWindow(bytes32 popId, uint64 fromBlock, uint64 toBlock) external view returns (uint64) {
+    /// @notice Sum positive point events for an account within [fromBlock, toBlock].
+    /// @dev    Counts only independent activity: excludes back-references
+    ///         ("vouched_for"), stake onboarding bonus ("stake_deposit"), and
+    ///         the vouch front-load itself ("vouch_received"). A vouchee must
+    ///         demonstrate real activity during the window — otherwise a $1k
+    ///         stake + same-block $1k vouch would clear threshold for free.
+    ///         O(history length); keep windows short or paginate off-chain.
+    function getPointsEarnedInWindow(address account, uint64 fromBlock, uint64 toBlock) external view returns (uint64) {
         bytes32 vouchedForHash = keccak256(bytes("vouched_for"));
+        bytes32 stakeDepositHash = keccak256(bytes("stake_deposit"));
+        bytes32 vouchReceivedHash = keccak256(bytes("vouch_received"));
         uint64 total = 0;
-        PointEvent[] storage hist = _history[popId];
-        for (uint256 i = 0; i < hist.length; i++) {
+        PointEvent[] storage hist = _history[account];
+        uint256 n = hist.length;
+        for (uint256 i = 0; i < n; i++) {
             PointEvent storage e = hist[i];
             if (e.timestamp < fromBlock || e.timestamp > toBlock) continue;
             if (e.amount <= 0) continue;
-            if (keccak256(bytes(e.reason)) == vouchedForHash) continue;
+            bytes32 rh = keccak256(bytes(e.reason));
+            if (rh == vouchedForHash) continue;
+            if (rh == stakeDepositHash) continue;
+            if (rh == vouchReceivedHash) continue;
             total += uint64(e.amount);
+        }
+        return total;
+    }
+
+    /// @notice Signed sum of every history delta whose timestamp is `<= toBlock`.
+    /// @dev    Used by `DisputeResolver` for `WrongTotalPointsSum` auto-resolve:
+    ///         a proposal's `totalPoints` must match the ledger sum as of the
+    ///         proposal's anchored block. Relies on `_history` being appended
+    ///         in block-monotonic order (enforced by writer-role entry points),
+    ///         so we `break` on the first event past `toBlock` rather than scan
+    ///         the full array. O(events <= toBlock).
+    function sumHistoryUpTo(address account, uint64 toBlock) external view returns (int64) {
+        int64 total = 0;
+        PointEvent[] storage hist = _history[account];
+        uint256 n = hist.length;
+        for (uint256 i = 0; i < n; i++) {
+            PointEvent storage e = hist[i];
+            if (e.timestamp > toBlock) break;
+            total += e.amount;
         }
         return total;
     }
