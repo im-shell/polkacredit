@@ -11,9 +11,8 @@ interface IDisputeResolver {
     error NoPendingProposal();
     error WindowClosed();
     error AlreadyDisputed();
-    error LeafHashMismatch();
-    error LeafIndexOutOfBounds();
-    error BadInclusionProof();
+    error HistoryIndexOutOfBounds();
+    error EventAfterSourceBlock();
     error NotOpen();
     error AutoResolves();
 
@@ -44,11 +43,12 @@ interface IDisputeResolver {
         bytes eventData;
         int64 expectedPoints;
         string expectedReasonCode;
-        // InvalidEvent:
-        bytes32[] merkleProof;
-        uint32 leafIndex;
-        bytes leafData; // raw leaf bytes the disputer claims is in the tree
-        bytes32 leafHash; // keccak256(leafData) — stored to avoid recomputing
+        // InvalidEvent: index into PointsLedger._history[account] that the
+        //               disputer claims shouldn't have counted. The on-chain
+        //               guard only checks the entry exists and predates the
+        //               proposal's sourceBlockHeight; governance decides
+        //               whether its content disqualifies the score.
+        uint32 historyIndex;
         string disqualifyingReason;
         // WrongArithmetic:
         int64 claimedCorrectPoints;

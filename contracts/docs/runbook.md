@@ -218,7 +218,7 @@ With all three services running:
 ## 5. Operational tips
 
 - **Run the API separately from the listener** in production: `INDEXER_MODE=api npm start` vs `INDEXER_MODE=listener npm start` (split-worker config — the current code runs both in one process; for scale split them).
-- **Back up the SQLite DB** (`indexer/polkacredit.db`) periodically — the Merkle tree + leaves tables are not reconstructable from chain state alone if the raw event log is trimmed.
+- **Back up the SQLite DB** (`indexer/polkacredit.db`) periodically — the raw event log and derived balances aren't reconstructable from chain state alone if the upstream RPCs prune.
 - **Watchtower** — run a second indexer instance with a different key, on separate infrastructure. Compare its computed `totalPoints` against what the primary indexer posted. File a `WrongTotalPointsSum` dispute on any drift (auto-resolves on-chain; costs $10 bond, refunded + $5 reward if you're right).
 
 ## 6. Cleaning up / resetting

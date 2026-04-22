@@ -14,13 +14,6 @@ contract PointsLedger is IPointsLedger, AccessControl {
     /// @notice Role granted to contracts/EOAs that can mint/burn/lock points.
     bytes32 public constant WRITER_ROLE = keccak256("PolkaCredit.WRITER_ROLE");
 
-    struct PointEvent {
-        int64 amount; // positive = mint, negative = burn, 0 = marker
-        uint64 timestamp; // block number
-        uint64 relatedVouchId; // 0 if none
-        string reason;
-    }
-
     mapping(address => PointsBalance) private _balances;
     mapping(address => PointEvent[]) private _history;
 

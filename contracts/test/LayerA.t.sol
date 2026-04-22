@@ -109,7 +109,7 @@ contract LayerATest is BaseTest {
         // block.number - 256. Anything equal or newer must work.
         uint64 oldest = uint64(block.number - 256);
         vm.prank(INDEXER);
-        uint64 pid = score.proposeScore(ALICE, 100, 50, bytes32(0), 0, oldest, 1);
+        uint64 pid = score.proposeScore(ALICE, 100, 50, 0, oldest, 1);
         IScoreRegistry.ScoreProposal memory p = score.getProposal(pid);
         assertEq(p.sourceBlockHeight, oldest);
         assertTrue(p.sourceBlockHash != bytes32(0), "boundary anchor has valid hash");
@@ -121,7 +121,7 @@ contract LayerATest is BaseTest {
         uint64 tooOld = uint64(block.number - 257);
         vm.expectRevert(IScoreRegistry.StaleSourceBlock.selector);
         vm.prank(INDEXER);
-        score.proposeScore(ALICE, 100, 50, bytes32(0), 0, tooOld, 1);
+        score.proposeScore(ALICE, 100, 50, 0, tooOld, 1);
     }
 
     function test_propose_anchor_futureBlockReverts() public {
@@ -129,7 +129,7 @@ contract LayerATest is BaseTest {
         uint64 future = uint64(block.number + 1);
         vm.expectRevert(IScoreRegistry.FutureSourceBlock.selector);
         vm.prank(INDEXER);
-        score.proposeScore(ALICE, 100, 50, bytes32(0), 0, future, 1);
+        score.proposeScore(ALICE, 100, 50, 0, future, 1);
     }
 
     function test_propose_anchor_currentBlockReverts() public {
@@ -139,7 +139,7 @@ contract LayerATest is BaseTest {
         uint64 current = uint64(block.number);
         vm.expectRevert(IScoreRegistry.FutureSourceBlock.selector);
         vm.prank(INDEXER);
-        score.proposeScore(ALICE, 100, 50, bytes32(0), 0, current, 1);
+        score.proposeScore(ALICE, 100, 50, 0, current, 1);
     }
 
     function test_propose_twoConsecutiveProposalsCaptureDifferentHashes() public {
@@ -149,7 +149,7 @@ contract LayerATest is BaseTest {
         bytes32 expected1 = blockhash(anchor1);
 
         vm.prank(INDEXER);
-        uint64 pid1 = score.proposeScore(ALICE, 100, 50, bytes32(0), 0, anchor1, 1);
+        uint64 pid1 = score.proposeScore(ALICE, 100, 50, 0, anchor1, 1);
 
         // Advance past MIN_PROPOSAL_INTERVAL so a superseder is allowed.
         vm.roll(block.number + score.MIN_PROPOSAL_INTERVAL() + 1);
@@ -158,7 +158,7 @@ contract LayerATest is BaseTest {
         assertTrue(expected2 != expected1, "different block, different hash");
 
         vm.prank(INDEXER);
-        uint64 pid2 = score.proposeScore(ALICE, 150, 75, bytes32(0), 0, anchor2, 1);
+        uint64 pid2 = score.proposeScore(ALICE, 150, 75, 0, anchor2, 1);
 
         IScoreRegistry.ScoreProposal memory p1 = score.getProposal(pid1);
         IScoreRegistry.ScoreProposal memory p2 = score.getProposal(pid2);
@@ -175,12 +175,10 @@ contract LayerATest is BaseTest {
         bytes32 expected = blockhash(anchor);
 
         vm.prank(INDEXER);
-        score.proposeScore(ALICE, 100, 50, bytes32(0), 0, anchor, 1);
+        score.proposeScore(ALICE, 100, 50, 0, anchor, 1);
 
         IDisputeResolver.DisputeEvidence memory ev;
-        ev.merkleProof = new bytes32[](0);
         ev.eventData = "";
-        ev.leafData = "";
         vm.prank(BOB);
         uint64 did = dispute.dispute(ALICE, IDisputeResolver.ClaimType.MissingEvent, ev);
 
@@ -203,10 +201,9 @@ contract LayerATest is BaseTest {
         uint64 anchor = uint64(block.number - 1);
 
         vm.prank(INDEXER);
-        uint64 pid = score.proposeScore(ALICE, 0, 0, bytes32(0), 0, anchor, 1);
+        uint64 pid = score.proposeScore(ALICE, 0, 0, 0, anchor, 1);
 
         IDisputeResolver.DisputeEvidence memory ev;
-        ev.merkleProof = new bytes32[](0);
 
         uint256 bobBefore = stable.balanceOf(BOB);
         uint256 treasuryBefore = stable.balanceOf(TREASURY);
@@ -230,10 +227,9 @@ contract LayerATest is BaseTest {
         uint64 anchor = uint64(block.number - 1);
 
         vm.prank(INDEXER);
-        score.proposeScore(ALICE, ScoreMath.computeScore(100), 100, bytes32(0), 0, anchor, 1);
+        score.proposeScore(ALICE, ScoreMath.computeScore(100), 100, 0, anchor, 1);
 
         IDisputeResolver.DisputeEvidence memory ev;
-        ev.merkleProof = new bytes32[](0);
 
         vm.prank(BOB);
         dispute.dispute(ALICE, IDisputeResolver.ClaimType.WrongTotalPointsSum, ev);
@@ -254,14 +250,13 @@ contract LayerATest is BaseTest {
 
         // Indexer proposes 50 as of the anchor — correct.
         vm.prank(INDEXER);
-        score.proposeScore(ALICE, ScoreMath.computeScore(50), 50, bytes32(0), 0, anchor, 1);
+        score.proposeScore(ALICE, ScoreMath.computeScore(50), 50, 0, anchor, 1);
 
         // Someone writes ANOTHER mint after the anchor. Should not affect dispute.
         vm.roll(block.number + 2);
         _mint(ALICE, 500, "loan_band");
 
         IDisputeResolver.DisputeEvidence memory ev;
-        ev.merkleProof = new bytes32[](0);
 
         // Disputer files WrongTotalPointsSum on the already-submitted proposal.
         // The dispute window is still open (we rolled only 2 blocks). Expected
@@ -286,10 +281,9 @@ contract LayerATest is BaseTest {
 
         // Indexer inflates to 50 instead of -70. Disputer wins.
         vm.prank(INDEXER);
-        score.proposeScore(ALICE, 50, 50, bytes32(0), 0, anchor, 1);
+        score.proposeScore(ALICE, 50, 50, 0, anchor, 1);
 
         IDisputeResolver.DisputeEvidence memory ev;
-        ev.merkleProof = new bytes32[](0);
 
         vm.prank(BOB);
         dispute.dispute(ALICE, IDisputeResolver.ClaimType.WrongTotalPointsSum, ev);
@@ -310,10 +304,9 @@ contract LayerATest is BaseTest {
 
         // Indexer posts totalPoints=100 (wrong). Score=computeScore(100)=100 (curve-consistent for 100, but wrong for actual 250).
         vm.prank(INDEXER);
-        score.proposeScore(ALICE, 100, 100, bytes32(0), 0, anchor, 1);
+        score.proposeScore(ALICE, 100, 100, 0, anchor, 1);
 
         IDisputeResolver.DisputeEvidence memory ev;
-        ev.merkleProof = new bytes32[](0);
 
         vm.prank(BOB);
         dispute.dispute(ALICE, IDisputeResolver.ClaimType.WrongTotalPointsSum, ev);
@@ -337,7 +330,7 @@ contract LayerATest is BaseTest {
         uint64 anchor1 = uint64(block.number - 1);
 
         vm.prank(INDEXER);
-        score.proposeScore(ALICE, ScoreMath.computeScore(50), 50, bytes32(0), 0, anchor1, 1);
+        score.proposeScore(ALICE, ScoreMath.computeScore(50), 50, 0, anchor1, 1);
 
         // More activity after the first proposal.
         vm.roll(block.number + 10);
@@ -347,10 +340,9 @@ contract LayerATest is BaseTest {
         vm.roll(block.number + score.MIN_PROPOSAL_INTERVAL());
         uint64 anchor2 = uint64(block.number - 1);
         vm.prank(INDEXER);
-        score.proposeScore(ALICE, ScoreMath.computeScore(75), 75, bytes32(0), 0, anchor2, 1);
+        score.proposeScore(ALICE, ScoreMath.computeScore(75), 75, 0, anchor2, 1);
 
         IDisputeResolver.DisputeEvidence memory ev;
-        ev.merkleProof = new bytes32[](0);
 
         // Disputer files against the current (superseding) proposal. Actual
         // sum up to anchor2 = 75 -> matches proposal -> disputer loses.

@@ -7,18 +7,20 @@ import {IScoreRegistry} from "./interfaces/IScoreRegistry.sol";
 import {ScoreMath} from "./lib/ScoreMath.sol";
 
 /// @title ScoreRegistry (optimistic)
-/// @notice Optimistic, Merkle-committed score lifecycle.
+/// @notice Optimistic, block-anchored score lifecycle.
 ///
 ///   propose → (CHALLENGE_WINDOW) → finalize
 ///            ↘ dispute → resolveDispute → {Finalized | Rejected}
 ///
 /// External consumers read only *finalized* scores. Pending proposals are
-/// visible so independent verifiers can challenge them.
+/// visible so independent verifiers can challenge them. Proposals commit to
+/// a `sourceBlockHeight` (+ its captured blockhash); disputes reference the
+/// on-chain `PointsLedger` directly — no Merkle root is needed because every
+/// event that contributes to the score is already a ledger entry.
 contract ScoreRegistry is IScoreRegistry, Ownable2Step {
     struct FinalizedScore {
         uint64 score; // 0..MAX_SCORE
         int64 totalPoints; // snapshot at computation time
-        bytes32 eventsRoot; // Merkle root of events used
         uint64 sourceBlockHeight;
         bytes32 sourceBlockHash; // blockhash(sourceBlockHeight) captured at propose time
         uint64 finalizedAt; // block when finalized
@@ -59,7 +61,6 @@ contract ScoreRegistry is IScoreRegistry, Ownable2Step {
         address indexed account,
         uint64 score,
         int64 totalPoints,
-        bytes32 eventsRoot,
         uint32 eventCount,
         uint64 sourceBlockHeight,
         bytes32 sourceBlockHash,
@@ -109,7 +110,6 @@ contract ScoreRegistry is IScoreRegistry, Ownable2Step {
         address account,
         uint64 score,
         int64 totalPoints,
-        bytes32 eventsRoot,
         uint32 eventCount,
         uint64 sourceBlockHeight,
         uint16 algorithmVersion
@@ -143,7 +143,6 @@ contract ScoreRegistry is IScoreRegistry, Ownable2Step {
             account: account,
             score: score,
             totalPoints: totalPoints,
-            eventsRoot: eventsRoot,
             eventCount: eventCount,
             sourceBlockHeight: sourceBlockHeight,
             sourceBlockHash: sourceBlockHash,
@@ -160,7 +159,6 @@ contract ScoreRegistry is IScoreRegistry, Ownable2Step {
             account,
             score,
             totalPoints,
-            eventsRoot,
             eventCount,
             sourceBlockHeight,
             sourceBlockHash,
@@ -181,7 +179,6 @@ contract ScoreRegistry is IScoreRegistry, Ownable2Step {
         _finalized[account] = FinalizedScore({
             score: p.score,
             totalPoints: p.totalPoints,
-            eventsRoot: p.eventsRoot,
             sourceBlockHeight: p.sourceBlockHeight,
             sourceBlockHash: p.sourceBlockHash,
             finalizedAt: uint64(block.number),
@@ -222,7 +219,6 @@ contract ScoreRegistry is IScoreRegistry, Ownable2Step {
                 _finalized[account] = FinalizedScore({
                     score: correctedScore,
                     totalPoints: correctedPoints,
-                    eventsRoot: p.eventsRoot,
                     sourceBlockHeight: p.sourceBlockHeight,
                     sourceBlockHash: p.sourceBlockHash,
                     finalizedAt: uint64(block.number),
@@ -237,7 +233,6 @@ contract ScoreRegistry is IScoreRegistry, Ownable2Step {
             _finalized[account] = FinalizedScore({
                 score: p.score,
                 totalPoints: p.totalPoints,
-                eventsRoot: p.eventsRoot,
                 sourceBlockHeight: p.sourceBlockHeight,
                 sourceBlockHash: p.sourceBlockHash,
                 finalizedAt: uint64(block.number),

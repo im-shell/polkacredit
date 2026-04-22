@@ -73,25 +73,25 @@ The most important architectural choice, and the one most worth understanding fi
 
 **PointsLedger = source of truth.** Every point delta is a row in `_history[account]`. Balance is derived. This is a full log — you can reconstruct the exact point trajectory from genesis by replaying the list.
 
-**ScoreRegistry = optimistic snapshot.** Stores the current displayed `score` for each account, committed periodically by the indexer with a Merkle root of the events used. Has a proposal/finalize/dispute lifecycle.
+**ScoreRegistry = optimistic snapshot.** Stores the current displayed `score` for each account, committed periodically by the indexer anchored to a `sourceBlockHeight`. Has a proposal/finalize/dispute lifecycle.
 
 The tension: why have both?
 
-- If ScoreRegistry were the only state, you'd be trusting the indexer to compute the whole score correctly, with only a dispute window as recourse — and you'd have to compare against a canonical Merkle-rooted event set.
+- If ScoreRegistry were the only state, you'd be trusting the indexer to compute the whole score correctly, with only a dispute window as recourse — and there'd be no on-chain record of the per-event deltas that fed into it.
 - If PointsLedger were the only state, the displayed score would be a pure view over history. No commitment, no snapshot, no dispute layer. Simpler, but the indexer's off-chain computation (transfer bands, inactivity decay, OpenGov vote matching) has no on-chain anchor point.
 
 We keep both because:
 
-1. Some point events come from off-chain sources (OpenGov votes, transfer volumes, loan band crossings, inactivity penalties). The indexer mints/burns them on PointsLedger. That write is authoritative — once written, the ledger IS the truth, and `sumHistoryUpTo` is a pure view.
-2. ScoreRegistry's job is to commit to *which events the indexer used*, so disputers can challenge mistakes. The Merkle root isn't for verifying the sum (Layer A's `WrongTotalPointsSum` does that directly from the ledger); it's for challenging *individual* events.
+1. Some point events come from off-chain sources (OpenGov votes, transfer volumes, loan band crossings, inactivity penalties). The indexer mints/burns them on PointsLedger. That write is authoritative — once written, the ledger IS the truth, and `sumHistoryUpTo` / `historyAt` are pure views.
+2. ScoreRegistry's job is to anchor a snapshot (score, totalPoints, anchored block) that external readers can cite without needing to replay every ledger event. Disputes reference PointsLedger entries by `historyIndex` — no off-chain Merkle commitment is needed.
 
-After Layer A, the roles are:
+The roles are:
 
 | What the disputer claims | What resolves it | Where the trust is |
 |---|---|---|
 | Score doesn't follow curve math | WrongArithmetic — on-chain | None |
 | totalPoints doesn't match ledger | WrongTotalPointsSum — on-chain (Layer A) | None |
-| A committed event is syntactically bogus | InvalidEvent — Merkle proof verified on-chain, governance decides semantics | Governance |
+| A ledger entry shouldn't have counted | InvalidEvent — `historyIndex` guard on-chain, governance decides semantics | Governance |
 | An event is missing entirely | MissingEvent — governance compares against chain | Governance |
 
 ## 4. The dispute system in full
@@ -109,7 +109,7 @@ The dispute system is the thing that makes PolkaCredit trustworthy despite an of
 
 This matters because a single bad-faith auto-resolve must not close the window and force legitimate later disputers to wait for a new proposal.
 
-**Governance path.** For the two remaining claim types that can't be decided by running a function, the contract just holds the dispute open, stores the evidence (including Merkle proofs which are verified on-chain upfront), and waits for a governance multisig to call `resolveDispute`. Governance cannot touch auto-resolving types (Layer A explicitly blocks this) — they settle inside `dispute()` before governance has a chance.
+**Governance path.** For the two remaining claim types that can't be decided by running a function, the contract just holds the dispute open, stores the evidence (for `InvalidEvent` the contract first pins the disputed `historyIndex` against `PointsLedger.historyLength` / `historyAt` + the proposal's `sourceBlockHeight`, so governance only sees claims that point to real ledger state), and waits for a governance multisig to call `resolveDispute`. Governance cannot touch auto-resolving types (Layer A explicitly blocks this) — they settle inside `dispute()` before governance has a chance.
 
 **Bond economics.**
 - `DISPUTE_BOND = $10`, scaled to the stablecoin's decimals.
@@ -224,11 +224,11 @@ TypeScript, Node.js, better-sqlite3. Single process. Jobs:
 
 1. **Listener** (`listeners/polkaCreditListener.ts`) — polls `eth_getLogs` against all six contract addresses, decodes via ethers Interface, writes to `raw_events` and domain tables (`point_balances`, `score_proposals`, `disputes`). After Layer A, listens to the new `WrongTotalPointsSum` claim type and captures the anchored `sourceBlockHash` from `ScoreProposed`.
 2. **Points calculator** (`calculators/pointsCalculator.ts`) — pure function of event inputs. Implements SPEC §2–3 precisely so an external verifier running the same code produces the same totalPoints.
-3. **Score job** (`jobs/scoreJob.ts`) — for each identity with pending changes, build a Merkle tree over the scored events, submit `proposeScore(...)` anchored at the RPC head.
+3. **Score job** (`jobs/scoreJob.ts`) — for each identity with pending changes, read the authoritative `totalPoints` from PointsLedger, compute the canonical score, and submit `proposeScore(...)` anchored at the RPC head.
 4. **Points job** (`jobs/pointsJob.ts`) — mint/burn the off-chain-sourced point deltas onto PointsLedger (transfers, loans, gov, inactivity). On-chain mints (stake deposit, vouch) happen in their source contracts directly.
 5. **API server** (`api/server.ts`) — read-only endpoints for frontend.
 
-Key property: the calculator is a *reference implementation* — anyone can run it against the raw event stream and verify the indexer's posted `totalPoints` and `eventsRoot`. This is how the "one honest watchtower" gets implemented in practice.
+Key property: the calculator is a *reference implementation* — anyone can run it against the raw event stream and verify the indexer's posted `totalPoints`. This is how the "one honest watchtower" gets implemented in practice.
 
 ### Frontend
 
@@ -262,7 +262,7 @@ Engineering estimate: 2–3 months for a small team. Includes auditing a vendore
 
 ### v3: zk proof of indexing
 
-**The indexer submits a zk-SNARK** proving: "given chain X's state at block H, I enumerated every event matching predicate P for account A, ran the SPEC calculator, and got totalPoints=N with Merkle root=R."
+**The indexer submits a zk-SNARK** proving: "given chain X's state at block H, I enumerated every event matching predicate P for account A, ran the SPEC calculator, and got totalPoints=N."
 
 **On-chain verifier** checks the zk proof in O(1). Full cryptographic completeness. Zero governance, zero oracle.
 

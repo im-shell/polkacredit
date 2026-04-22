@@ -24,8 +24,8 @@ Both are bounded gas. `sumHistoryUpTo` iterates `_history[account]` but terminat
 
 After Layer A, governance is invoked only for:
 
-1. **`InvalidEvent`** — the Merkle proof shows the leaf is in the committed tree, but governance decides whether its content should have disqualified the proposal (e.g., "this loan repayment event is syntactically valid but the underlying transaction was reverted").
-2. **`MissingEvent`** — a disputer claims an event should have been counted but wasn't in the tree. Contract has no way to verify presence-of-something-off-chain, so governance inspects.
+1. **`InvalidEvent`** — the disputer pins a `PointsLedger._history[account]` entry by `historyIndex`. The contract checks the entry exists and was visible at the proposal's anchor, then routes to governance, which decides whether its content should have disqualified the proposal (e.g., "this loan repayment event is syntactically valid but the underlying transaction was reverted").
+2. **`MissingEvent`** — a disputer claims an event should have been counted but isn't reflected in the ledger. Contract has no way to verify presence-of-something-off-chain, so governance inspects.
 
 After Layer B ships (pending pallet-revive receipts-trie confirmation), receipt-inclusion and receipt-forgery disputes for on-chain-readable events also auto-resolve, narrowing governance's domain further. The residual governance scope becomes:
 

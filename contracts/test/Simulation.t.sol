@@ -125,7 +125,6 @@ contract SimulationTest is Test {
         address account,
         uint64 scoreVal,
         int64 totalPoints,
-        bytes32 eventsRoot,
         uint32 eventCount,
         uint64 sourceBlockHeight,
         uint16 algorithmVersion,
@@ -138,7 +137,6 @@ contract SimulationTest is Test {
                 account,
                 scoreVal,
                 totalPoints,
-                eventsRoot,
                 eventCount,
                 sourceBlockHeight,
                 algorithmVersion,
@@ -169,11 +167,11 @@ contract SimulationTest is Test {
         uint64 sourceBlockHeight
     ) internal returns (uint64 proposalId) {
         uint64 nonce = oracleRegistry.nextNonce();
-        bytes memory sig = _signSubmitScore(account, scoreVal, totalPoints, bytes32(0), 0, sourceBlockHeight, 1, nonce);
+        bytes memory sig = _signSubmitScore(account, scoreVal, totalPoints, 0, sourceBlockHeight, 1, nonce);
         bytes[] memory sigs = new bytes[](1);
         sigs[0] = sig;
         return oracleRegistry.submitScore(
-            account, scoreVal, totalPoints, bytes32(0), 0, sourceBlockHeight, 1, nonce, sigs
+            account, scoreVal, totalPoints, 0, sourceBlockHeight, 1, nonce, sigs
         );
     }
 
@@ -361,7 +359,6 @@ contract SimulationTest is Test {
 
         // Bob disputes with WrongArithmetic. Auto-resolves in same tx.
         IDisputeResolver.DisputeEvidence memory ev;
-        ev.merkleProof = new bytes32[](0);
         vm.prank(BOB);
         uint64 did = dispute.dispute(ALICE, IDisputeResolver.ClaimType.WrongArithmetic, ev);
         console.log("[2] bob files WrongArithmetic dispute id=", did);
@@ -397,7 +394,6 @@ contract SimulationTest is Test {
         // Bob files WrongTotalPointsSum. Contract iterates _history, discovers
         // actual sum is 70, auto-resolves with correction.
         IDisputeResolver.DisputeEvidence memory ev;
-        ev.merkleProof = new bytes32[](0);
         vm.prank(BOB);
         dispute.dispute(ALICE, IDisputeResolver.ClaimType.WrongTotalPointsSum, ev);
 
@@ -421,7 +417,7 @@ contract SimulationTest is Test {
 
         vm.expectRevert(IScoreRegistry.NotIndexer.selector);
         vm.prank(oracle);
-        score.proposeScore(ALICE, 40, 40, bytes32(0), 0, anchor, 1);
+        score.proposeScore(ALICE, 40, 40, 0, anchor, 1);
         console.log("[1] oracle EOA blocked from direct proposeScore");
 
         // Also: mintPoints with a valid reason must go through OracleRegistry.

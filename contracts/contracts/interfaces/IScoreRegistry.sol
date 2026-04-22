@@ -34,7 +34,6 @@ interface IScoreRegistry {
         address account;
         uint64 score;
         int64 totalPoints;
-        bytes32 eventsRoot;
         uint32 eventCount;
         uint64 sourceBlockHeight;
         /// @notice `blockhash(sourceBlockHeight)` captured at propose time.
@@ -67,7 +66,6 @@ interface IScoreRegistry {
         address account,
         uint64 score,
         int64 totalPoints,
-        bytes32 eventsRoot,
         uint32 eventCount,
         uint64 sourceBlockHeight,
         uint16 algorithmVersion

@@ -8,15 +8,17 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {IDisputeResolver} from "./interfaces/IDisputeResolver.sol";
 import {IPointsLedger} from "./interfaces/IPointsLedger.sol";
 import {IScoreRegistry} from "./interfaces/IScoreRegistry.sol";
-import {Merkle} from "./lib/Merkle.sol";
 import {ScoreMath} from "./lib/ScoreMath.sol";
 
 /// @title DisputeResolver
 /// @notice Accepts bonded challenges against pending score proposals.
-///         `WrongArithmetic` claims resolve automatically on-chain; the other
-///         two claim types (`MissingEvent`, `InvalidEvent`) are resolved by a
-///         governance multisig in v1, with the Merkle inclusion proof already
-///         verified on-chain before the multisig touches them.
+///         `WrongArithmetic` and `WrongTotalPointsSum` auto-resolve on-chain
+///         against the canonical curve and the `PointsLedger` history. The
+///         semantic claim types (`MissingEvent`, `InvalidEvent`) are resolved
+///         by a governance multisig — for `InvalidEvent`, the contract pins
+///         the disputed ledger entry by `historyIndex` and verifies it exists
+///         within the proposal's anchored window before accepting the bond,
+///         so governance only ever sees claims grounded in real ledger state.
 contract DisputeResolver is IDisputeResolver, Ownable2Step {
     using SafeERC20 for IERC20;
 
@@ -119,15 +121,17 @@ contract DisputeResolver is IDisputeResolver, Ownable2Step {
         if (block.number >= p.proposedAt + scoreRegistry.CHALLENGE_WINDOW()) revert WindowClosed();
         if (openDisputeByProposal[p.id] != 0) revert AlreadyDisputed();
 
-        // `InvalidEvent` inclusion is verified on-chain before we accept the
-        // dispute; governance still makes the final call on whether the event
-        // disqualifies, but we reject upfront if the Merkle proof is bogus.
+        // `InvalidEvent` pins an actual `PointsLedger._history[account]` entry
+        // by its index. The on-chain guard confirms the entry exists and was
+        // visible at the proposal's anchored block — so governance only ever
+        // sees claims pointing at real ledger state that could have
+        // contributed to the score.
         if (claimType == ClaimType.InvalidEvent) {
-            if (keccak256(evidence.leafData) != evidence.leafHash) revert LeafHashMismatch();
-            if (evidence.leafIndex >= p.eventCount) revert LeafIndexOutOfBounds();
-            if (!Merkle.verify(p.eventsRoot, evidence.leafHash, evidence.merkleProof, evidence.leafIndex)) {
-                revert BadInclusionProof();
+            if (evidence.historyIndex >= pointsLedger.historyLength(account)) {
+                revert HistoryIndexOutOfBounds();
             }
+            IPointsLedger.PointEvent memory e = pointsLedger.historyAt(account, evidence.historyIndex);
+            if (e.timestamp > p.sourceBlockHeight) revert EventAfterSourceBlock();
         }
 
         stablecoin.safeTransferFrom(msg.sender, address(this), DISPUTE_BOND);

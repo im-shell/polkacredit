@@ -11,25 +11,25 @@ contract ScoreRegistryTest is BaseTest {
     function test_propose_onlyIndexer() public {
         vm.expectRevert(IScoreRegistry.NotIndexer.selector);
         vm.prank(ALICE);
-        score.proposeScore(ALICE, 100, 50, bytes32(0), 0, 0, 1);
+        score.proposeScore(ALICE, 100, 50, 0, 0, 1);
     }
 
     function test_propose_rejectsOverMax() public {
         vm.expectRevert(IScoreRegistry.ScoreOverMax.selector);
         vm.prank(INDEXER);
-        score.proposeScore(ALICE, 851, 500, bytes32(0), 0, 0, 1);
+        score.proposeScore(ALICE, 851, 500, 0, 0, 1);
     }
 
     function test_propose_rejectsFutureSourceBlock() public {
         vm.expectRevert(IScoreRegistry.FutureSourceBlock.selector);
         vm.prank(INDEXER);
-        score.proposeScore(ALICE, 100, 50, bytes32(0), 0, uint64(block.number + 1), 1);
+        score.proposeScore(ALICE, 100, 50, 0, uint64(block.number + 1), 1);
     }
 
     function test_propose_rejectsZeroAccount() public {
         vm.expectRevert(IScoreRegistry.ZeroAddress.selector);
         vm.prank(INDEXER);
-        score.proposeScore(address(0), 100, 50, bytes32(0), 0, 0, 1);
+        score.proposeScore(address(0), 100, 50, 0, 0, 1);
     }
 
     // ─────────────────────── Block-anchor pattern (Layer A) ───────────────────────
@@ -38,7 +38,7 @@ contract ScoreRegistryTest is BaseTest {
         // sourceBlockHeight == block.number must revert — `blockhash(current)` is 0.
         vm.expectRevert(IScoreRegistry.FutureSourceBlock.selector);
         vm.prank(INDEXER);
-        score.proposeScore(ALICE, 100, 50, bytes32(0), 0, uint64(block.number), 1);
+        score.proposeScore(ALICE, 100, 50, 0, uint64(block.number), 1);
     }
 
     function test_propose_rejectsStaleSourceBlock() public {
@@ -47,7 +47,7 @@ contract ScoreRegistryTest is BaseTest {
         // An anchor at block 0 is now stale — `blockhash(0)` returns 0.
         vm.expectRevert(IScoreRegistry.StaleSourceBlock.selector);
         vm.prank(INDEXER);
-        score.proposeScore(ALICE, 100, 50, bytes32(0), 0, 0, 1);
+        score.proposeScore(ALICE, 100, 50, 0, 0, 1);
     }
 
     function test_propose_capturesSourceBlockHash() public {
@@ -58,7 +58,7 @@ contract ScoreRegistryTest is BaseTest {
         assertTrue(expected != bytes32(0), "precondition: blockhash non-zero");
 
         vm.prank(INDEXER);
-        uint64 pid = score.proposeScore(ALICE, 100, 50, bytes32(uint256(0xa11ce)), 1, anchor, 1);
+        uint64 pid = score.proposeScore(ALICE, 100, 50, 1, anchor, 1);
 
         IScoreRegistry.ScoreProposal memory p = score.getProposal(pid);
         assertEq(p.sourceBlockHeight, anchor, "height stored");
@@ -71,7 +71,7 @@ contract ScoreRegistryTest is BaseTest {
         bytes32 expected = blockhash(anchor);
 
         vm.prank(INDEXER);
-        score.proposeScore(ALICE, 100, 50, bytes32(uint256(0xb0b)), 1, anchor, 1);
+        score.proposeScore(ALICE, 100, 50, 1, anchor, 1);
         vm.roll(block.number + score.CHALLENGE_WINDOW());
         score.finalizeScore(ALICE);
 
@@ -84,7 +84,7 @@ contract ScoreRegistryTest is BaseTest {
 
     function test_propose_putsIntoPending() public {
         vm.prank(INDEXER);
-        uint64 pid = score.proposeScore(ALICE, 247, 145, bytes32(uint256(1)), 3, 0, 1);
+        uint64 pid = score.proposeScore(ALICE, 247, 145, 3, 0, 1);
 
         IScoreRegistry.ScoreProposal memory p = score.getPendingProposal(ALICE);
         assertEq(p.id, pid);
@@ -102,14 +102,14 @@ contract ScoreRegistryTest is BaseTest {
 
     function test_finalize_windowOpenReverts() public {
         vm.prank(INDEXER);
-        score.proposeScore(ALICE, 100, 50, bytes32(0), 0, 0, 1);
+        score.proposeScore(ALICE, 100, 50, 0, 0, 1);
         vm.expectRevert(IScoreRegistry.WindowOpen.selector);
         score.finalizeScore(ALICE);
     }
 
     function test_finalize_afterWindow_promotesAndClears() public {
         vm.prank(INDEXER);
-        uint64 pid = score.proposeScore(ALICE, 247, 145, bytes32(uint256(0xdead)), 0, 0, 1);
+        uint64 pid = score.proposeScore(ALICE, 247, 145, 0, 0, 1);
         vm.roll(block.number + score.CHALLENGE_WINDOW());
 
         assertTrue(score.canFinalize(ALICE), "canFinalize");
@@ -132,22 +132,22 @@ contract ScoreRegistryTest is BaseTest {
 
     function test_propose_cannotSupersedeTooSoon() public {
         vm.prank(INDEXER);
-        score.proposeScore(ALICE, 100, 50, bytes32(0), 0, 0, 1);
+        score.proposeScore(ALICE, 100, 50, 0, 0, 1);
         vm.roll(block.number + score.MIN_PROPOSAL_INTERVAL() - 1);
         // After MIN_PROPOSAL_INTERVAL ≈ 1800 blocks we're outside the 256-block
         // blockhash horizon, so the anchor must be a recent block.
         vm.expectRevert(IScoreRegistry.TooSoon.selector);
         vm.prank(INDEXER);
-        score.proposeScore(ALICE, 110, 55, bytes32(0), 0, uint64(block.number - 1), 1);
+        score.proposeScore(ALICE, 110, 55, 0, uint64(block.number - 1), 1);
     }
 
     function test_propose_supersedesAfterInterval() public {
         vm.prank(INDEXER);
-        uint64 firstId = score.proposeScore(ALICE, 100, 50, bytes32(0), 0, 0, 1);
+        uint64 firstId = score.proposeScore(ALICE, 100, 50, 0, 0, 1);
         vm.roll(block.number + score.MIN_PROPOSAL_INTERVAL());
 
         vm.prank(INDEXER);
-        uint64 secondId = score.proposeScore(ALICE, 150, 75, bytes32(0), 0, uint64(block.number - 1), 1);
+        uint64 secondId = score.proposeScore(ALICE, 150, 75, 0, uint64(block.number - 1), 1);
         assertGt(secondId, firstId);
 
         IScoreRegistry.ScoreProposal memory old = score.getProposal(firstId);
@@ -168,11 +168,11 @@ contract ScoreRegistryTest is BaseTest {
         // Old indexer rejected.
         vm.expectRevert(IScoreRegistry.NotIndexer.selector);
         vm.prank(INDEXER);
-        score.proposeScore(ALICE, 100, 50, bytes32(0), 0, 0, 1);
+        score.proposeScore(ALICE, 100, 50, 0, 0, 1);
 
         // New indexer accepted.
         vm.prank(newIndexer);
-        score.proposeScore(ALICE, 100, 50, bytes32(0), 0, 0, 1);
+        score.proposeScore(ALICE, 100, 50, 0, 0, 1);
     }
 
     function test_setDisputeResolver_onlyOwner() public {
