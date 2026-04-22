@@ -70,6 +70,12 @@ contract VouchRegistry is Ownable2Step {
     uint64 public constant VOUCHEE_SUCCESS_THRESHOLD = 50; // in-window pts to resolve success
     uint64 public constant VOUCHER_LIFETIME_CAP = 200; // §2.2
     uint8 public constant MAX_DISTINCT_VOUCHERS_PER_VOUCHEE = 3; // §2.3
+    /// @notice Buffer after `expiresAt` before `resolveVouch` is callable.
+    ///         Gives the oracle time to flush any late-window activity
+    ///         mints into PointsLedger so the delta-based success check
+    ///         reflects the complete in-window activity picture. ~1 min
+    ///         at 6s/block — negligible against a 6-month window.
+    uint64 public constant RESOLVE_GRACE = 10;
 
     IPointsLedger public immutable pointsLedger;
     IStakingVault public immutable stakingVault;
@@ -210,7 +216,8 @@ contract VouchRegistry is Ownable2Step {
     function resolveVouch(uint64 vouchId) external {
         VouchRecord storage v = _vouches[vouchId];
         if (v.status != VouchStatus.Active) revert NotActive();
-        if (block.number < v.expiresAt) revert WindowOpen();
+        // Window open OR still inside the oracle-flush grace period.
+        if (block.number < v.expiresAt + RESOLVE_GRACE) revert WindowOpen();
 
         IPointsLedger.PointsBalance memory voucheeBalance = pointsLedger.getBalance(v.vouchee);
         // Signed delta. Negative deltas (net burns during window) always

@@ -140,6 +140,41 @@ contract VouchRegistryTest is BaseTest {
         vouch.vouch(BOB, STAKE_AMOUNT);
     }
 
+    // ─────────────────────── Grace period ───────────────────────
+
+    function test_resolveVouch_graceEnforced() public {
+        // Grace period closes the "oracle-lag" race: resolveVouch reverts
+        // until block.number >= expiresAt + RESOLVE_GRACE, giving the
+        // oracle time to flush any late-window activity mints.
+        vm.prank(ALICE);
+        uint64 id = vouch.vouch(BOB, STAKE_AMOUNT);
+
+        // At expiresAt exactly: still WindowOpen.
+        vm.roll(block.number + vouch.VOUCH_WINDOW());
+        vm.expectRevert(VouchRegistry.WindowOpen.selector);
+        vouch.resolveVouch(id);
+
+        // One block past expiresAt, still inside grace: WindowOpen.
+        vm.roll(block.number + 1);
+        vm.expectRevert(VouchRegistry.WindowOpen.selector);
+        vouch.resolveVouch(id);
+
+        // expiresAt + RESOLVE_GRACE - 1: still blocked (strict `<`).
+        vm.roll(block.number + vouch.RESOLVE_GRACE() - 2);
+        vm.expectRevert(VouchRegistry.WindowOpen.selector);
+        vouch.resolveVouch(id);
+
+        // expiresAt + RESOLVE_GRACE: finally resolvable.
+        vm.roll(block.number + 1);
+        vouch.resolveVouch(id);
+        VouchRegistry.VouchRecord memory v = vouch.getVouch(id);
+        assertTrue(
+            v.status == VouchRegistry.VouchStatus.Succeeded
+                || v.status == VouchRegistry.VouchStatus.Failed,
+            "resolve landed at grace boundary"
+        );
+    }
+
     // ─────────────────────── Resolve: success ───────────────────────
 
     function test_resolveVouch_success_givesTierReward() public {
@@ -151,7 +186,7 @@ contract VouchRegistryTest is BaseTest {
         // front-loaded, any mints during the window contribute to the
         // delta directly.
         _mint(BOB, 50, "opengov_vote");
-        vm.roll(block.number + vouch.VOUCH_WINDOW() + 1);
+        vm.roll(block.number + vouch.VOUCH_WINDOW() + vouch.RESOLVE_GRACE() + 1);
 
         int64 aliceBefore = ledger.getBalance(ALICE).total;
         int64 bobBefore = ledger.getBalance(BOB).total; // 40 stake + 50 activity = 90
@@ -183,7 +218,7 @@ contract VouchRegistryTest is BaseTest {
         uint64 id = vouch.vouch(BOB, STAKE_AMOUNT);
 
         _mint(BOB, 49, "loan_band"); // just under threshold
-        vm.roll(block.number + vouch.VOUCH_WINDOW() + 1);
+        vm.roll(block.number + vouch.VOUCH_WINDOW() + vouch.RESOLVE_GRACE() + 1);
 
         int64 bobBefore = ledger.getBalance(BOB).total; // 40 stake + 49 activity = 89
         uint256 treasuryBefore = stable.balanceOf(TREASURY);
@@ -201,7 +236,7 @@ contract VouchRegistryTest is BaseTest {
         uint64 id = vouch.vouch(BOB, STAKE_AMOUNT);
 
         _mint(BOB, 50, "loan_band"); // exactly threshold
-        vm.roll(block.number + vouch.VOUCH_WINDOW() + 1);
+        vm.roll(block.number + vouch.VOUCH_WINDOW() + vouch.RESOLVE_GRACE() + 1);
 
         vouch.resolveVouch(id);
 
@@ -218,7 +253,7 @@ contract VouchRegistryTest is BaseTest {
         // Burn more than Bob had pre-vouch.
         vm.prank(INDEXER);
         ledger.burnPoints(BOB, 10, "inactivity");
-        vm.roll(block.number + vouch.VOUCH_WINDOW() + 1);
+        vm.roll(block.number + vouch.VOUCH_WINDOW() + vouch.RESOLVE_GRACE() + 1);
 
         vouch.resolveVouch(id);
         VouchRegistry.VouchRecord memory v = vouch.getVouch(id);
@@ -243,7 +278,7 @@ contract VouchRegistryTest is BaseTest {
             ids[i] = vouch.vouch(vouchees[i], TIER_10K);
             // Vouchee clears the success threshold.
             _mint(vouchees[i], 50, "opengov_vote");
-            vm.roll(block.number + vouch.VOUCH_WINDOW() + 1);
+            vm.roll(block.number + vouch.VOUCH_WINDOW() + vouch.RESOLVE_GRACE() + 1);
             vouch.resolveVouch(ids[i]);
             // Avoid concurrency: since we resolved, the slot recycles.
         }
@@ -262,7 +297,7 @@ contract VouchRegistryTest is BaseTest {
         vm.prank(ALICE);
         uint64 id = vouch.vouch(BOB, STAKE_AMOUNT);
 
-        vm.roll(block.number + vouch.VOUCH_WINDOW() + 1);
+        vm.roll(block.number + vouch.VOUCH_WINDOW() + vouch.RESOLVE_GRACE() + 1);
 
         uint256 treasuryBefore = stable.balanceOf(TREASURY);
         uint256 vaultBefore = stable.balanceOf(address(vault));
