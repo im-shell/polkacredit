@@ -1,0 +1,44 @@
+# dependencies
+node_modules/
+
+# environment / secrets
+.env
+.env.local
+.env.bak
+.env.*.local
+!.env.example
+*.pem
+
+# build output
+dist/
+build/
+out/
+artifacts/
+cache/
+typechain-types/
+
+# foundry
+broadcast/
+
+# indexer local state
+indexer/polkacredit.db
+indexer/polkacredit.db-*
+indexer/logs/
+indexer/fixtures/*.json
+
+# editor / os
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# claude code / agent settings
+.claude/
+CLAUDE.md
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
