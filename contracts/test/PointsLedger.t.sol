@@ -195,41 +195,10 @@ contract PointsLedgerTest is BaseTest {
         ledger.burnLockedPoints(ALICE, 0, 1);
     }
 
-    // ─────────────────────── getPointsEarnedInWindow ───────────────────────
-
-    function test_earnedInWindow_sumsPositiveInRange() public {
-        _mint(ALICE, 10, "a");
-        vm.roll(block.number + 5);
-        _mint(ALICE, 15, "b");
-        vm.roll(block.number + 5);
-        _mint(ALICE, 20, "c");
-
-        uint64 from = uint64(block.number) - 10;
-        uint64 to = uint64(block.number);
-        uint64 earned = ledger.getPointsEarnedInWindow(ALICE, from, to);
-        // 10 (out-of-range: at block.number-10 inclusive? inclusive from)
-        assertEq(earned, 45, "all three inside [from, to]");
-    }
-
-    function test_earnedInWindow_excludesBurnAndVouchedFor() public {
-        _mint(ALICE, 50, "opengov_vote"); // counts
-        _mint(ALICE, 10, "vouched_for"); // excluded
-        vm.prank(INDEXER);
-        ledger.burnPoints(ALICE, 5, "penalty"); // negative, excluded
-
-        uint64 earned = ledger.getPointsEarnedInWindow(ALICE, 0, uint64(block.number));
-        assertEq(earned, 50, "only self-earned counted");
-    }
-
-    function test_earnedInWindow_respectsBounds() public {
-        vm.roll(100);
-        _mint(ALICE, 10, "a");
-        vm.roll(200);
-        _mint(ALICE, 20, "b");
-        vm.roll(300);
-        _mint(ALICE, 30, "c");
-
-        // Window [150, 250] should capture only the mint at block 200.
-        assertEq(ledger.getPointsEarnedInWindow(ALICE, 150, 250), 20);
-    }
+    // The historical `getPointsEarnedInWindow` view is gone — vouch success
+    // is now a pure totalPoints-delta check, no reason-code filtering
+    // needed. See `VouchRegistry.resolveVouch` and the deferred-credit
+    // SPEC §2.3 refinement for the full flow. Coverage for `sumHistoryUpTo`
+    // (the remaining window-like view used by WrongTotalPointsSum disputes)
+    // lives in `test/LayerA.t.sol`.
 }

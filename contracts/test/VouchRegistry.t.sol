@@ -63,28 +63,42 @@ contract VouchRegistryTest is BaseTest {
         vouch.vouch(ALICE, TIER_5K);
     }
 
-    // ─────────────────────── Open flow & front-load ───────────────────────
+    // ─────────────────────── Open flow & deferred credit ───────────────────────
 
-    function test_vouch_frontLoadsVoucheeAndCommitsStake() public {
+    function test_vouch_snapshotsVoucheeAndCommitsStake() public {
+        // Under the deferred-credit model (post-SPEC §2.3 refinement) the
+        // vouch_received reward is only minted on successful resolution.
+        // At vouch-open we snapshot the vouchee's totalPoints; no mint to
+        // the vouchee happens here.
+        int64 bobBefore = ledger.getBalance(BOB).total;
+
         vm.prank(ALICE);
-        uint64 id = vouch.vouch(BOB, STAKE_AMOUNT); // $1k tier → 40 pts each side
+        uint64 id = vouch.vouch(BOB, STAKE_AMOUNT); // $1k tier → 40 pts each side on success
 
-        // Bob front-loaded 40 (plus his own 40 stake_deposit = 80).
+        // CRITICAL: Bob's totalPoints must NOT change at vouch-open.
+        // He still has exactly his stake_deposit (40), no +40 vouch_received.
         IPointsLedger.PointsBalance memory bb = ledger.getBalance(BOB);
-        assertEq(bb.total, int64(80), "bob front-loaded");
+        assertEq(bb.total, bobBefore, "vouchee total unchanged at vouch-open");
+        assertEq(bb.total, int64(40), "bob has stake_deposit only");
 
-        // Alice's stake has $1k committed.
+        // VouchRecord captured the snapshot.
+        VouchRegistry.VouchRecord memory v = vouch.getVouch(id);
+        assertEq(v.voucheeTotalAtOpen, bobBefore, "snapshot matches pre-vouch total");
+        assertEq(v.creditedToVouchee, 0, "no vouchee credit yet");
+        assertEq(v.creditedToVoucher, 0, "no voucher credit yet");
+
+        // Alice's stake has $1k committed + the vault is lock-flagged.
         IStakingVault.StakeRecord memory s = vault.getStake(ALICE);
         assertEq(s.committed, STAKE_AMOUNT, "committed reserved");
         assertTrue(s.isLocked, "stake marked locked");
         assertEq(vouch.activeVouchCount(ALICE), 1);
         assertEq(vouch.distinctVouchersCount(BOB), 1);
         assertTrue(vouch.hasVouchedFor(ALICE, BOB));
-        // Pair uniqueness prevents re-vouching.
+
+        // Pair uniqueness prevents re-vouching the same address.
         vm.expectRevert(VouchRegistry.PairExhausted.selector);
         vm.prank(ALICE);
         vouch.vouch(BOB, STAKE_AMOUNT);
-        id; // silence warning
     }
 
     function test_vouch_concurrencyCap() public {
@@ -132,21 +146,83 @@ contract VouchRegistryTest is BaseTest {
         vm.prank(ALICE);
         uint64 id = vouch.vouch(BOB, STAKE_AMOUNT);
 
-        // Bob must earn ≥ 50 from independent activity — stake_deposit and
-        // vouch_received are excluded from earned-in-window per PointsLedger
-        // semantics.
+        // Bob must grow totalPoints by ≥ VOUCHEE_SUCCESS_THRESHOLD (50)
+        // between vouch-open snapshot and resolve. Since nothing was
+        // front-loaded, any mints during the window contribute to the
+        // delta directly.
         _mint(BOB, 50, "opengov_vote");
         vm.roll(block.number + vouch.VOUCH_WINDOW() + 1);
 
-        uint256 aliceBefore = uint256(int256(ledger.getBalance(ALICE).total));
+        int64 aliceBefore = ledger.getBalance(ALICE).total;
+        int64 bobBefore = ledger.getBalance(BOB).total; // 40 stake + 50 activity = 90
         vouch.resolveVouch(id);
 
-        // $1k tier → voucher gets +40.
-        assertEq(uint256(int256(ledger.getBalance(ALICE).total)), aliceBefore + 40, "voucher credited tier pts");
+        // $1k tier → voucher gets +40 credit (post-truncation); vouchee
+        // gets +40 vouch_received now (deferred payout, not front-load).
+        assertEq(ledger.getBalance(ALICE).total, aliceBefore + 40, "voucher credited tier pts on success");
+        assertEq(ledger.getBalance(BOB).total, bobBefore + 40, "vouchee credited tier pts on success");
+
+        // VouchRecord reflects the credits.
+        VouchRegistry.VouchRecord memory v = vouch.getVouch(id);
+        assertEq(uint8(v.status), uint8(VouchRegistry.VouchStatus.Succeeded));
+        assertEq(v.creditedToVoucher, 40);
+        assertEq(v.creditedToVouchee, 40);
+
         // Alice's committed returned to free.
         IStakingVault.StakeRecord memory s = vault.getStake(ALICE);
         assertEq(s.committed, 0, "committed released");
         assertFalse(s.isLocked, "stake unlocked (no other active vouches)");
+    }
+
+    function test_resolveVouch_failsWhenDeltaBelowThreshold() public {
+        // Bob earns activity below the 50-pt threshold. Vouch must fail
+        // even though Bob's total went up by >= 50 if we naively counted
+        // stake_deposit — but the snapshot was taken AFTER stake_deposit,
+        // so only in-window activity counts toward the delta.
+        vm.prank(ALICE);
+        uint64 id = vouch.vouch(BOB, STAKE_AMOUNT);
+
+        _mint(BOB, 49, "loan_band"); // just under threshold
+        vm.roll(block.number + vouch.VOUCH_WINDOW() + 1);
+
+        int64 bobBefore = ledger.getBalance(BOB).total; // 40 stake + 49 activity = 89
+        uint256 treasuryBefore = stable.balanceOf(TREASURY);
+        vouch.resolveVouch(id);
+
+        // Bob unchanged — no vouch_received paid out, nothing clawed back.
+        assertEq(ledger.getBalance(BOB).total, bobBefore, "vouchee unchanged on failure");
+        // Stake slashed to treasury.
+        assertEq(stable.balanceOf(TREASURY), treasuryBefore + STAKE_AMOUNT);
+    }
+
+    function test_resolveVouch_passesAtExactlyThreshold() public {
+        // Boundary: delta == VOUCHEE_SUCCESS_THRESHOLD should succeed.
+        vm.prank(ALICE);
+        uint64 id = vouch.vouch(BOB, STAKE_AMOUNT);
+
+        _mint(BOB, 50, "loan_band"); // exactly threshold
+        vm.roll(block.number + vouch.VOUCH_WINDOW() + 1);
+
+        vouch.resolveVouch(id);
+
+        VouchRegistry.VouchRecord memory v = vouch.getVouch(id);
+        assertEq(uint8(v.status), uint8(VouchRegistry.VouchStatus.Succeeded));
+    }
+
+    function test_resolveVouch_negativeDeltaFails() public {
+        // If the vouchee's totalPoints goes DOWN during the window (net
+        // burns > mints), delta is negative and the vouch must fail.
+        vm.prank(ALICE);
+        uint64 id = vouch.vouch(BOB, STAKE_AMOUNT);
+
+        // Burn more than Bob had pre-vouch.
+        vm.prank(INDEXER);
+        ledger.burnPoints(BOB, 10, "inactivity");
+        vm.roll(block.number + vouch.VOUCH_WINDOW() + 1);
+
+        vouch.resolveVouch(id);
+        VouchRegistry.VouchRecord memory v = vouch.getVouch(id);
+        assertEq(uint8(v.status), uint8(VouchRegistry.VouchStatus.Failed));
     }
 
     function test_resolveVouch_success_truncatesAtLifetimeCap() public {
@@ -178,16 +254,14 @@ contract VouchRegistryTest is BaseTest {
 
     // ─────────────────────── Resolve: failure ───────────────────────
 
-    function test_resolveVouch_failure_slashesCommittedAndClawsBack() public {
-        // Advance past Bob's stake_deposit block so it falls outside the vouch
-        // window — otherwise Bob's setUp stake (+40) + vouch_received (+40)
-        // would clear the 50-point threshold and trigger the success branch.
-        vm.roll(block.number + 10);
-
+    function test_resolveVouch_failure_slashesStake() public {
+        // Under deferred-credit, no setup gymnastics needed: Bob never
+        // receives vouch_received at open, so the snapshot is 40
+        // (stake_deposit) and he has no activity to grow it. Delta = 0,
+        // vouch fails, voucher stake slashed.
         vm.prank(ALICE);
         uint64 id = vouch.vouch(BOB, STAKE_AMOUNT);
 
-        // Bob does not hit threshold (only vouch_received = 40, below 50).
         vm.roll(block.number + vouch.VOUCH_WINDOW() + 1);
 
         uint256 treasuryBefore = stable.balanceOf(TREASURY);
@@ -204,7 +278,7 @@ contract VouchRegistryTest is BaseTest {
         assertEq(s.amount, TIER_10K - STAKE_AMOUNT);
         assertEq(s.committed, 0);
 
-        // Bob's front-load (40) clawed back. He still has his stake_deposit 40.
+        // Bob's totalPoints unchanged — nothing was minted or clawed back.
         assertEq(ledger.getBalance(BOB).total, int64(40));
     }
 
@@ -219,7 +293,10 @@ contract VouchRegistryTest is BaseTest {
         vouch.reportDefault(id);
     }
 
-    function test_reportDefault_slashesAndClaws() public {
+    function test_reportDefault_slashesStake() public {
+        // Under deferred-credit there's no vouchee clawback on default —
+        // nothing was minted to claw back. reportDefault reduces to "slash
+        // the committed stake, mark vouch Defaulted."
         vm.prank(ALICE);
         uint64 id = vouch.vouch(BOB, STAKE_AMOUNT);
 
@@ -231,11 +308,14 @@ contract VouchRegistryTest is BaseTest {
         // Slash: $1k moved to treasury.
         assertEq(stable.balanceOf(TREASURY), treasuryBefore + STAKE_AMOUNT);
 
-        // Bob's front-load clawed back (40). Stake_deposit 40 remains.
+        // Bob's total unchanged — no front-load existed to claw back.
         assertEq(ledger.getBalance(BOB).total, int64(40));
 
         IStakingVault.StakeRecord memory s = vault.getStake(ALICE);
         assertEq(s.amount, TIER_10K - STAKE_AMOUNT);
         assertEq(s.committed, 0);
+
+        VouchRegistry.VouchRecord memory v = vouch.getVouch(id);
+        assertEq(uint8(v.status), uint8(VouchRegistry.VouchStatus.Defaulted));
     }
 }

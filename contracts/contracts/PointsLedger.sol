@@ -51,7 +51,7 @@ contract PointsLedger is IPointsLedger, AccessControl {
         return hasRole(WRITER_ROLE, who);
     }
 
-    // ─────────────────────── Core mint / burn ───────────────────────
+    // ----- Core mint / burn -----
 
     function mintPoints(address account, uint64 amount, string calldata reason) external onlyRole(WRITER_ROLE) {
         if (account == address(0)) revert ZeroAddress();
@@ -85,7 +85,7 @@ contract PointsLedger is IPointsLedger, AccessControl {
         emit PointsBurned(account, amount, reason);
     }
 
-    // ─────────────────────── Vouch lock / unlock ───────────────────────
+    // ----- Vouch lock / unlock -----
 
     function lockPoints(address account, uint64 amount, uint64 vouchId) external onlyRole(WRITER_ROLE) {
         if (account == address(0)) revert ZeroAddress();
@@ -116,6 +116,9 @@ contract PointsLedger is IPointsLedger, AccessControl {
 
     /// @notice Burn `amount` points. The locked-for-vouchId portion is burned
     ///         first; if amount > locked, the excess comes out of available.
+    /// @param account The account to burn points from.
+    /// @param amount The amount of points to burn.
+    /// @param vouchId The vouch ID to burn points for.
     function burnLockedPoints(address account, uint64 amount, uint64 vouchId) external onlyRole(WRITER_ROLE) {
         if (amount == 0) revert ZeroAmount();
 
@@ -146,7 +149,7 @@ contract PointsLedger is IPointsLedger, AccessControl {
         emit PointsBurned(account, amount, "vouch_penalty");
     }
 
-    // ─────────────────────── Views ───────────────────────
+    // ----- Views -----
 
     function getBalance(address account) external view returns (PointsBalance memory) {
         return _balances[account];
@@ -158,33 +161,6 @@ contract PointsLedger is IPointsLedger, AccessControl {
 
     function historyAt(address account, uint256 idx) external view returns (PointEvent memory) {
         return _history[account][idx];
-    }
-
-    /// @notice Sum positive point events for an account within [fromBlock, toBlock].
-    /// @dev    Counts only independent activity: excludes back-references
-    ///         ("vouched_for"), stake onboarding bonus ("stake_deposit"), and
-    ///         the vouch front-load itself ("vouch_received"). A vouchee must
-    ///         demonstrate real activity during the window — otherwise a $1k
-    ///         stake + same-block $1k vouch would clear threshold for free.
-    ///         O(history length); keep windows short or paginate off-chain.
-    function getPointsEarnedInWindow(address account, uint64 fromBlock, uint64 toBlock) external view returns (uint64) {
-        bytes32 vouchedForHash = keccak256(bytes("vouched_for"));
-        bytes32 stakeDepositHash = keccak256(bytes("stake_deposit"));
-        bytes32 vouchReceivedHash = keccak256(bytes("vouch_received"));
-        uint64 total = 0;
-        PointEvent[] storage hist = _history[account];
-        uint256 n = hist.length;
-        for (uint256 i = 0; i < n; i++) {
-            PointEvent storage e = hist[i];
-            if (e.timestamp < fromBlock || e.timestamp > toBlock) continue;
-            if (e.amount <= 0) continue;
-            bytes32 rh = keccak256(bytes(e.reason));
-            if (rh == vouchedForHash) continue;
-            if (rh == stakeDepositHash) continue;
-            if (rh == vouchReceivedHash) continue;
-            total += uint64(e.amount);
-        }
-        return total;
     }
 
     /// @notice Signed sum of every history delta whose timestamp is `<= toBlock`.

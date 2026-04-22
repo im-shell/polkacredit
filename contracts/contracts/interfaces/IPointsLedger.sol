@@ -23,6 +23,5 @@ interface IPointsLedger {
     function unlockPoints(address account, uint64 amount, uint64 vouchId) external;
     function burnLockedPoints(address account, uint64 amount, uint64 vouchId) external;
     function getBalance(address account) external view returns (PointsBalance memory);
-    function getPointsEarnedInWindow(address account, uint64 fromBlock, uint64 toBlock) external view returns (uint64);
     function sumHistoryUpTo(address account, uint64 toBlock) external view returns (int64);
 }
