@@ -194,7 +194,6 @@ contract OracleRegistry is Ownable2Step {
         address account,
         uint64 score,
         int64 totalPoints,
-        bytes32 eventsRoot,
         uint32 eventCount,
         uint64 sourceBlockHeight,
         uint16 algorithmVersion,
@@ -208,7 +207,6 @@ contract OracleRegistry is Ownable2Step {
                 account,
                 score,
                 totalPoints,
-                eventsRoot,
                 eventCount,
                 sourceBlockHeight,
                 algorithmVersion,
@@ -217,7 +215,7 @@ contract OracleRegistry is Ownable2Step {
         );
         address[] memory signers = _verifyThreshold(payload, nonce, signatures);
         proposalId = scoreRegistry.proposeScore(
-            account, score, totalPoints, eventsRoot, eventCount, sourceBlockHeight, algorithmVersion
+            account, score, totalPoints, eventCount, sourceBlockHeight, algorithmVersion
         );
         emit ScoreSubmitted(account, proposalId, nonce, signers);
     }

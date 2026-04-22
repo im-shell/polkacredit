@@ -73,7 +73,6 @@ contract OracleRegistryTest is BaseTest {
         address account,
         uint64 scoreVal,
         int64 totalPoints,
-        bytes32 eventsRoot,
         uint32 eventCount,
         uint64 sourceBlockHeight,
         uint16 algorithmVersion,
@@ -86,7 +85,6 @@ contract OracleRegistryTest is BaseTest {
                 account,
                 scoreVal,
                 totalPoints,
-                eventsRoot,
                 eventCount,
                 sourceBlockHeight,
                 algorithmVersion,
@@ -153,11 +151,11 @@ contract OracleRegistryTest is BaseTest {
         uint64 anchor = uint64(block.number - 1);
         uint64 nonce = oracle.nextNonce();
 
-        bytes32 payload = _scorePayload(ALICE, 100, 50, bytes32(uint256(0xa11ce)), 1, anchor, 1, nonce);
+        bytes32 payload = _scorePayload(ALICE, 100, 50, 1, anchor, 1, nonce);
         bytes[] memory sigs = new bytes[](1);
         sigs[0] = _sign(ORACLE1_PK, payload);
 
-        uint64 pid = oracle.submitScore(ALICE, 100, 50, bytes32(uint256(0xa11ce)), 1, anchor, 1, nonce, sigs);
+        uint64 pid = oracle.submitScore(ALICE, 100, 50, 1, anchor, 1, nonce, sigs);
         assertGt(pid, 0, "proposalId returned");
 
         IScoreRegistry.ScoreProposal memory p = score.getProposal(pid);
@@ -178,12 +176,12 @@ contract OracleRegistryTest is BaseTest {
         uint64 anchor = uint64(block.number - 1);
         uint64 nonce = oracle.nextNonce();
 
-        bytes32 payload = _scorePayload(ALICE, 100, 50, bytes32(0), 0, anchor, 1, nonce);
+        bytes32 payload = _scorePayload(ALICE, 100, 50, 0, anchor, 1, nonce);
         bytes[] memory sigs = new bytes[](1); // only 1 sig, threshold is 2
         sigs[0] = _sign(ORACLE1_PK, payload);
 
         vm.expectRevert(OracleRegistry.NotEnoughSignatures.selector);
-        oracle.submitScore(ALICE, 100, 50, bytes32(0), 0, anchor, 1, nonce, sigs);
+        oracle.submitScore(ALICE, 100, 50, 0, anchor, 1, nonce, sigs);
     }
 
     function test_submitScore_wrongSignerReverts() public {
@@ -194,12 +192,12 @@ contract OracleRegistryTest is BaseTest {
         uint64 anchor = uint64(block.number - 1);
         uint64 nonce = oracle.nextNonce();
 
-        bytes32 payload = _scorePayload(ALICE, 100, 50, bytes32(0), 0, anchor, 1, nonce);
+        bytes32 payload = _scorePayload(ALICE, 100, 50, 0, anchor, 1, nonce);
         bytes[] memory sigs = new bytes[](1);
         sigs[0] = _sign(NOT_ORACLE_PK, payload);
 
         vm.expectRevert(OracleRegistry.InvalidSigner.selector);
-        oracle.submitScore(ALICE, 100, 50, bytes32(0), 0, anchor, 1, nonce, sigs);
+        oracle.submitScore(ALICE, 100, 50, 0, anchor, 1, nonce, sigs);
     }
 
     function test_submitScore_duplicateSignerReverts() public {
@@ -213,13 +211,13 @@ contract OracleRegistryTest is BaseTest {
         uint64 nonce = oracle.nextNonce();
 
         // Two signatures but both from the SAME oracle — should revert.
-        bytes32 payload = _scorePayload(ALICE, 100, 50, bytes32(0), 0, anchor, 1, nonce);
+        bytes32 payload = _scorePayload(ALICE, 100, 50, 0, anchor, 1, nonce);
         bytes[] memory sigs = new bytes[](2);
         sigs[0] = _sign(ORACLE1_PK, payload);
         sigs[1] = _sign(ORACLE1_PK, payload);
 
         vm.expectRevert(OracleRegistry.DuplicateSigner.selector);
-        oracle.submitScore(ALICE, 100, 50, bytes32(0), 0, anchor, 1, nonce, sigs);
+        oracle.submitScore(ALICE, 100, 50, 0, anchor, 1, nonce, sigs);
     }
 
     function test_submitScore_replayAttemptReverts() public {
@@ -229,18 +227,18 @@ contract OracleRegistryTest is BaseTest {
         uint64 anchor = uint64(block.number - 1);
         uint64 nonce = oracle.nextNonce();
 
-        bytes32 payload = _scorePayload(ALICE, 100, 50, bytes32(uint256(1)), 1, anchor, 1, nonce);
+        bytes32 payload = _scorePayload(ALICE, 100, 50, 1, anchor, 1, nonce);
         bytes[] memory sigs = new bytes[](1);
         sigs[0] = _sign(ORACLE1_PK, payload);
 
-        oracle.submitScore(ALICE, 100, 50, bytes32(uint256(1)), 1, anchor, 1, nonce, sigs);
+        oracle.submitScore(ALICE, 100, 50, 1, anchor, 1, nonce, sigs);
 
         // Move past MIN_PROPOSAL_INTERVAL so a second proposal would be
         // structurally allowed; replay should still fail on nonce.
         vm.roll(block.number + score.MIN_PROPOSAL_INTERVAL() + 1);
         uint64 anchor2 = uint64(block.number - 1);
         vm.expectRevert(OracleRegistry.InvalidNonce.selector);
-        oracle.submitScore(ALICE, 100, 50, bytes32(uint256(1)), 1, anchor2, 1, nonce, sigs);
+        oracle.submitScore(ALICE, 100, 50, 1, anchor2, 1, nonce, sigs);
     }
 
     function test_submitScore_twoOfTwo_happyPath() public {
@@ -253,12 +251,12 @@ contract OracleRegistryTest is BaseTest {
         uint64 anchor = uint64(block.number - 1);
         uint64 nonce = oracle.nextNonce();
 
-        bytes32 payload = _scorePayload(BOB, 200, 100, bytes32(uint256(0xb0b)), 2, anchor, 1, nonce);
+        bytes32 payload = _scorePayload(BOB, 200, 100, 2, anchor, 1, nonce);
         bytes[] memory sigs = new bytes[](2);
         sigs[0] = _sign(ORACLE1_PK, payload);
         sigs[1] = _sign(ORACLE2_PK, payload);
 
-        uint64 pid = oracle.submitScore(BOB, 200, 100, bytes32(uint256(0xb0b)), 2, anchor, 1, nonce, sigs);
+        uint64 pid = oracle.submitScore(BOB, 200, 100, 2, anchor, 1, nonce, sigs);
         assertGt(pid, 0);
 
         IScoreRegistry.ScoreProposal memory p = score.getProposal(pid);
