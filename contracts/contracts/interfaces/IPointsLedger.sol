@@ -2,6 +2,12 @@
 pragma solidity ^0.8.30;
 
 interface IPointsLedger {
+    error ZeroAddress();
+    error ZeroAmount();
+    error ZeroVouchId();
+    error InsufficientAvailable();
+    error NotEnoughLocked();
+
     struct PointsBalance {
         int64 total;
         uint64 earned;

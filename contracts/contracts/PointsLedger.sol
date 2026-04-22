@@ -11,12 +11,6 @@ import {IPointsLedger} from "./interfaces/IPointsLedger.sol";
 ///      StakingVault, VouchRegistry, and the indexer signer). Points are
 ///      non-transferable.
 contract PointsLedger is IPointsLedger, AccessControl {
-    error ZeroAddress();
-    error ZeroAmount();
-    error ZeroVouchId();
-    error InsufficientAvailable();
-    error NotEnoughLocked();
-
     /// @notice Role granted to contracts/EOAs that can mint/burn/lock points.
     bytes32 public constant WRITER_ROLE = keccak256("PolkaCredit.WRITER_ROLE");
 

@@ -15,19 +15,6 @@ import {ScoreMath} from "./lib/ScoreMath.sol";
 /// External consumers read only *finalized* scores. Pending proposals are
 /// visible so independent verifiers can challenge them.
 contract ScoreRegistry is IScoreRegistry, Ownable2Step {
-    error ZeroAddress();
-    error NotIndexer();
-    error NotDisputeResolver();
-    error ScoreOverMax();
-    error FutureSourceBlock();
-    error StaleSourceBlock();
-    error TooSoon();
-    error DisputePending();
-    error NotPending();
-    error WindowOpen();
-    error WindowClosed();
-    error NotDisputed();
-
     struct FinalizedScore {
         uint64 score; // 0..MAX_SCORE
         int64 totalPoints; // snapshot at computation time
@@ -43,11 +30,15 @@ contract ScoreRegistry is IScoreRegistry, Ownable2Step {
     ///         captured `sourceBlockHash` is always non-zero.
     uint64 public constant MAX_SOURCE_BLOCK_AGE = 256;
 
-    /// @notice ~24 hours at 12s/block.
-    uint64 public constant CHALLENGE_WINDOW = 7200;
+    /// @notice TESTNET DEMO: 10 blocks = ~1 min at 6s/block. For production
+    ///         restore to 7200 (~24h on 12s-block chains or ~12h on 6s-block
+    ///         chains like Passet Hub) so honest disputers have real time to
+    ///         rescan and challenge.
+    uint64 public constant CHALLENGE_WINDOW = 10;
 
-    /// @notice ~6 hours; a proposal can be superseded only after this long.
-    uint64 public constant MIN_PROPOSAL_INTERVAL = 1800;
+    /// @notice TESTNET DEMO: 5 blocks (~30s). Production was 1800 (~6h) so an
+    ///         indexer can't bait-and-switch a proposal late in the window.
+    uint64 public constant MIN_PROPOSAL_INTERVAL = 5;
 
     uint64 public constant MAX_SCORE = 850;
 

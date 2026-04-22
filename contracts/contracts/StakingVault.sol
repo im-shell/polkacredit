@@ -1,137 +1,204 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
+pragma solidity 0.8.30;
+
+import {Ownable, Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import {IPointsLedger} from "./interfaces/IPointsLedger.sol";
 import {IStakingVault} from "./interfaces/IStakingVault.sol";
-import {PopId} from "./lib/PopId.sol";
-
-interface IERC20 {
-    function transfer(address to, uint256 amount) external returns (bool);
-    function transferFrom(address from, address to, uint256 amount) external returns (bool);
-    function balanceOf(address) external view returns (uint256);
-}
 
 /// @title StakingVault
-/// @notice Holds stablecoin deposits from users. Entry gate to the
-///         PolkaCredit system.
-/// @dev    popId is derived directly from msg.sender via PopId.fromAddress.
-///         See lib/PopId.sol for the rationale.
-contract StakingVault is IStakingVault {
-    using PopId for address;
+/// @author Sameer Kumar
+/// @notice Entry gate to PolkaCredit. Holds tiered stablecoin deposits
+///         ($1k / $5k / $10k per SPEC.md §2.1). Tier is fixed at first stake.
+///         Per-vouch committed amounts are bookkeept so VouchRegistry can
+///         slash (on failure) or release (on success) a specific commitment
+///         without unwinding the whole stake.
+contract StakingVault is IStakingVault, Ownable2Step, ReentrancyGuard {
+    using SafeERC20 for IERC20;
 
-    /// @notice Minimum stake: $50 in an 18-decimals stablecoin.
-    uint128 public constant MINIMUM_STAKE = 50 ether;
+    /// @notice Decimals of the stablecoin used for staking.
+    uint8 public immutable decimal;
 
-    /// @notice Lock duration ~6 months at 12s/block.
-    uint64 public constant LOCK_DURATION = 129600;
+    /// @notice Stake tier amounts in base units (decimals applied in ctor).
+    uint96 public immutable tier1k;
+    uint96 public immutable tier5k;
+    uint96 public immutable tier10k;
 
-    /// @notice Points granted on initial stake.
-    uint64 public constant STAKE_DEPOSIT_POINTS = 10;
+    /// @notice Stake-deposit points per SPEC.md §2.1.
+    uint64 public constant POINTS_1K = 40;
+    uint64 public constant POINTS_5K = 70;
+    uint64 public constant POINTS_10K = 100;
+
+    /// @notice 6-month lock at 6s/block (~2.59M blocks).
+    uint32 public constant LOCK_DURATION = 2_592_000;
 
     IERC20 public immutable stablecoin;
     IPointsLedger public immutable pointsLedger;
 
-    address public admin;
     address public vouchRegistry;
-    /// @notice Non-reentrancy guard.
-    uint256 private _locked = 1;
+    address public treasury;
 
-    mapping(bytes32 => StakeRecord) private _stakes;
-
-    event Staked(bytes32 indexed popId, uint128 amount, uint64 stakedAt);
-    event Unstaked(bytes32 indexed popId, uint128 amount, uint64 unstakedAt);
-    event VouchRegistrySet(address indexed vouchRegistry);
-
-    modifier onlyAdmin() {
-        require(msg.sender == admin, "StakingVault: not admin");
-        _;
-    }
+    mapping(address => StakeRecord) private _stakes;
 
     modifier onlyVouchRegistry() {
-        require(msg.sender == vouchRegistry, "StakingVault: not vouch registry");
+        if (msg.sender != vouchRegistry) revert NotVouchRegistry();
         _;
     }
 
-    modifier nonReentrant() {
-        require(_locked == 1, "StakingVault: reentrant");
-        _locked = 2;
-        _;
-        _locked = 1;
-    }
-
-    constructor(address _admin, address _stablecoin, address _pointsLedger) {
-        require(_admin != address(0), "StakingVault: zero admin");
-        require(_stablecoin != address(0), "StakingVault: zero stable");
-        require(_pointsLedger != address(0), "StakingVault: zero ledger");
-        admin = _admin;
+    constructor(address admin_, address _stablecoin, address _pointsLedger, address _treasury, uint8 _decimal)
+        Ownable(admin_)
+    {
+        if (_stablecoin == address(0)) revert ZeroAddress();
+        if (_pointsLedger == address(0)) revert ZeroAddress();
+        if (_treasury == address(0)) revert ZeroAddress();
         stablecoin = IERC20(_stablecoin);
         pointsLedger = IPointsLedger(_pointsLedger);
+        treasury = _treasury;
+        decimal = _decimal;
+
+        uint96 unit = uint96(10 ** _decimal);
+        tier1k = 1_000 * unit;
+        tier5k = 5_000 * unit;
+        tier10k = 10_000 * unit;
     }
 
-    function setVouchRegistry(address _vouchRegistry) external onlyAdmin {
-        require(_vouchRegistry != address(0), "StakingVault: zero registry");
+    /// @notice Set the vouch registry address
+    /// @param _vouchRegistry The new vouch registry address
+    function setVouchRegistry(address _vouchRegistry) external onlyOwner {
+        if (_vouchRegistry == address(0)) revert ZeroAddress();
         vouchRegistry = _vouchRegistry;
         emit VouchRegistrySet(_vouchRegistry);
     }
 
-    function transferAdmin(address newAdmin) external onlyAdmin {
-        require(newAdmin != address(0), "StakingVault: zero admin");
-        admin = newAdmin;
+    /// @notice Set the treasury address
+    /// @param _treasury The new treasury address
+    function setTreasury(address _treasury) external onlyOwner {
+        if (_treasury == address(0)) revert ZeroAddress();
+        treasury = _treasury;
+        emit TreasurySet(_treasury);
     }
 
-    // ─────────────────────── Stake / unstake ───────────────────────
+    // ---- Tier math ----
 
-    function stake(uint128 amount) external nonReentrant {
-        bytes32 popId = msg.sender.fromAddress();
-        require(amount >= MINIMUM_STAKE, "StakingVault: below minimum");
-        require(_stakes[popId].amount == 0, "StakingVault: already staked");
+    /// @notice Check if the given amount is a valid stake tier
+    /// @param amount The amount to check
+    /// @return True if the amount is a valid stake tier, false otherwise
+    function isValidStakeTier(uint96 amount) public view returns (bool) {
+        return amount == tier1k || amount == tier5k || amount == tier10k;
+    }
 
-        require(stablecoin.transferFrom(msg.sender, address(this), amount), "StakingVault: transfer failed");
+    /// @notice Get the points for a given stake amount
+    /// @param amount The amount to get points for
+    /// @return The points for the given amount
+    function tierPoints(uint96 amount) public view returns (uint64) {
+        if (amount == tier10k) return POINTS_10K;
+        if (amount == tier5k) return POINTS_5K;
+        if (amount == tier1k) return POINTS_1K;
+        return 0;
+    }
 
-        _stakes[popId] = StakeRecord({
+    // ---- Stake / unstake ----
+
+    /// @notice Stake stablecoin at one of three tiers ($1k / $5k / $10k),
+    ///         grants tiered stake-deposit points. Lifetime one-shot.
+    function stake(uint96 amount) external nonReentrant {
+        if (!isValidStakeTier(amount)) revert InvalidStakeAmount();
+        if (_stakes[msg.sender].amount != 0) revert AlreadyStaked();
+
+        stablecoin.safeTransferFrom(msg.sender, address(this), amount);
+
+        _stakes[msg.sender] = StakeRecord({
             amount: amount,
-            stakedAt: uint64(block.number),
-            lockUntil: uint64(block.number) + LOCK_DURATION,
+            committed: 0,
+            stakedAt: uint32(block.number),
+            lockUntil: uint32(block.number) + LOCK_DURATION,
             isLocked: false
         });
 
-        pointsLedger.mintPoints(popId, STAKE_DEPOSIT_POINTS, "stake_deposit");
+        uint64 pts = tierPoints(amount);
+        pointsLedger.mintPoints(msg.sender, pts, "stake_deposit");
 
-        emit Staked(popId, amount, uint64(block.number));
+        emit Staked(msg.sender, amount, pts, uint32(block.number));
     }
 
+    /**
+     * @notice Unstake stablecoin, burn points, and delete staking record
+     */
     function unstake() external nonReentrant {
-        bytes32 popId = msg.sender.fromAddress();
+        StakeRecord memory s = _stakes[msg.sender];
+        if (s.amount == 0) revert NoStake();
+        if (block.number < s.lockUntil) revert StillLocked();
+        if (s.isLocked) revert ActiveVouches();
+        if (s.committed != 0) revert OutstandingCommitment();
 
-        StakeRecord memory s = _stakes[popId];
-        require(s.amount > 0, "StakingVault: no stake");
-        require(block.number >= s.lockUntil, "StakingVault: still locked");
-        require(!s.isLocked, "StakingVault: active vouches");
+        delete _stakes[msg.sender];
+        stablecoin.safeTransfer(msg.sender, s.amount);
 
-        delete _stakes[popId];
-        require(stablecoin.transfer(msg.sender, s.amount), "StakingVault: transfer failed");
-
-        emit Unstaked(popId, s.amount, uint64(block.number));
+        emit Unstaked(msg.sender, s.amount, uint32(block.number));
     }
 
-    // ─────────────────────── Lock controls (VouchRegistry) ───────────────────────
+    // ---- Vouch hooks (VouchRegistry only) ----
 
-    function extendLock(bytes32 popId) external onlyVouchRegistry {
-        require(_stakes[popId].amount > 0, "StakingVault: no stake");
-        _stakes[popId].isLocked = true;
+    /// @notice Extend the lock for a user
+    /// @param who The user to extend the lock for
+    function extendLock(address who) external onlyVouchRegistry {
+        if (_stakes[who].amount == 0) revert NoStake();
+        _stakes[who].isLocked = true;
     }
 
-    function releaseLock(bytes32 popId) external onlyVouchRegistry {
-        _stakes[popId].isLocked = false;
+    /// @notice Release the lock for a user
+    /// @param who The user to release the lock for
+    function releaseLock(address who) external onlyVouchRegistry {
+        _stakes[who].isLocked = false;
     }
 
-    // ─────────────────────── Views ───────────────────────
-
-    function getStake(bytes32 popId) external view returns (StakeRecord memory) {
-        return _stakes[popId];
+    /// @notice Reserve `amount` of `who`'s free stake against an open vouch.
+    ///         Sum of commitments cannot exceed base stake.
+    function commitStake(address who, uint96 amount) external onlyVouchRegistry {
+        StakeRecord storage s = _stakes[who];
+        if (s.amount == 0) revert NoStake();
+        if (uint256(s.committed) + uint256(amount) > uint256(s.amount)) revert OverCommit();
+        s.committed += amount;
+        emit StakeCommitted(who, amount);
     }
 
-    function hasActiveStake(bytes32 popId) external view returns (bool) {
-        return _stakes[popId].amount > 0;
+    /// @notice Release a previously committed amount back to free stake.
+    function uncommitStake(address who, uint96 amount) external onlyVouchRegistry {
+        StakeRecord storage s = _stakes[who];
+        if (s.committed < amount) revert UnderCommit();
+        s.committed -= amount;
+        emit StakeUncommitted(who, amount);
+    }
+
+    /// @notice Slash `amount` from `who`'s committed stake, send to treasury.
+    ///         Reduces both `committed` and `amount` in lockstep so free-stake
+    ///         accounting stays correct.
+    function slashStake(address who, uint96 amount) external onlyVouchRegistry nonReentrant {
+        StakeRecord storage s = _stakes[who];
+        if (s.committed < amount) revert UnderCommit();
+        if (s.amount < amount) revert SlashExceedsStake();
+        s.committed -= amount;
+        s.amount -= amount;
+        stablecoin.safeTransfer(treasury, amount);
+        emit StakeSlashed(who, amount);
+    }
+
+    // ---- Views ----
+
+    /// @notice Get the stake record for a user
+    /// @param who The user to get the stake record for
+    /// @return The stake record for the user
+    function getStake(address who) external view returns (StakeRecord memory) {
+        return _stakes[who];
+    }
+
+    /// @notice Check if a user has an active stake
+    /// @param who The user to check
+    /// @return True if the user has an active stake, false otherwise
+    function hasActiveStake(address who) external view returns (bool) {
+        return _stakes[who].amount > 0;
     }
 }

@@ -1,7 +1,7 @@
 import hre from "hardhat";
 import * as fs from "fs";
 import * as path from "path";
-import { getAddress, type Chain } from "viem";
+import { getAddress, parseEther, type Chain } from "viem";
 
 const DEPLOYMENTS_DIR = path.resolve(__dirname, "../deployments");
 
@@ -19,6 +19,7 @@ type Deployed = {
     VouchRegistry: `0x${string}`;
     ScoreRegistry: `0x${string}`;
     DisputeResolver: `0x${string}`;
+    OracleRegistry: `0x${string}`;
   };
 };
 
@@ -54,9 +55,13 @@ async function main() {
   const treasury = getAddress(process.env.TREASURY_ADDRESS ?? deployer);
   const chainId = await publicClient.getChainId();
 
+  // Bootstrap oracle bond: 100 mUSD per oracle. Testnet-comfortable; tune up
+  // for production to make slashing economically meaningful.
+  const ORACLE_MIN_BOND = parseEther("100");
+
   console.log(`Network      : ${hre.network.name} (chainId ${chainId})`);
   console.log(`Deployer     : ${deployer}`);
-  console.log(`Indexer      : ${indexer}`);
+  console.log(`Indexer      : ${indexer}  (the bootstrap oracle)`);
   console.log(`Treasury     : ${treasury}`);
 
   const stable = await hre.viem.deployContract("MockStablecoin", [], { client });
@@ -81,6 +86,9 @@ async function main() {
 
   const score = await hre.viem.deployContract(
     "ScoreRegistry",
+    // `indexer` here is a placeholder — we'll immediately point it at
+    // OracleRegistry via setIndexer once it's deployed. The ctor requires a
+    // non-zero address so we pass the EOA as a temporary.
     [deployer, indexer],
     { client },
   );
@@ -92,6 +100,21 @@ async function main() {
     { client },
   );
   console.log(`DisputeResolver  : ${dispute.address}`);
+
+  const oracle = await hre.viem.deployContract(
+    "OracleRegistry",
+    [
+      deployer,
+      score.address,
+      ledger.address,
+      stable.address,
+      treasury,
+      ORACLE_MIN_BOND,
+      1, // threshold = 1 — bootstrap with a single oracle
+    ],
+    { client },
+  );
+  console.log(`OracleRegistry   : ${oracle.address}`);
 
   console.log("Wiring permissions...");
   // pallet-revive's tx pool rejects rapid same-sender submissions with
@@ -105,14 +128,18 @@ async function main() {
     console.log(`  ${label} ✓`);
   };
 
+  // OracleRegistry now holds the writer roles that the raw indexer address
+  // used to have. The bootstrap indexer becomes an oracle that registers
+  // itself; its signatures flow through OracleRegistry → ScoreRegistry /
+  // PointsLedger.
   await send("ledger.setAuthorized(vault)", () =>
     ledger.write.setAuthorized([vault.address, true]),
   );
   await send("ledger.setAuthorized(vouch)", () =>
     ledger.write.setAuthorized([vouch.address, true]),
   );
-  await send("ledger.setAuthorized(indexer)", () =>
-    ledger.write.setAuthorized([indexer, true]),
+  await send("ledger.setAuthorized(oracleRegistry)", () =>
+    ledger.write.setAuthorized([oracle.address, true]),
   );
   await send("vault.setVouchRegistry", () =>
     vault.write.setVouchRegistry([vouch.address]),
@@ -122,6 +149,25 @@ async function main() {
   );
   await send("score.setDisputeResolver", () =>
     score.write.setDisputeResolver([dispute.address]),
+  );
+  await send("score.setIndexer(oracleRegistry)", () =>
+    score.write.setIndexer([oracle.address]),
+  );
+
+  // Bootstrap: fund + approve + register the single oracle (our indexer key).
+  // For testnet demos we mint mUSD to the indexer so it can post its bond;
+  // production deployments would transfer from treasury or require the oracle
+  // operator to source the stake externally.
+  await send("stable.mint(indexer, bond)", () =>
+    stable.write.mint([indexer, ORACLE_MIN_BOND]),
+  );
+  await send("stable.approve(oracleRegistry)", async () => {
+    // If deployer != indexer we need a separate client; for the common
+    // case (deployer == indexer) the same wallet is fine.
+    return stable.write.approve([oracle.address, ORACLE_MIN_BOND]);
+  });
+  await send("oracleRegistry.register", () =>
+    oracle.write.register([ORACLE_MIN_BOND]),
   );
 
   writeDeployment({
@@ -138,6 +184,7 @@ async function main() {
       VouchRegistry: vouch.address,
       ScoreRegistry: score.address,
       DisputeResolver: dispute.address,
+      OracleRegistry: oracle.address,
     },
   });
 }

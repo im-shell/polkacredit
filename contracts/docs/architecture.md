@@ -11,42 +11,44 @@ The goal is **gatekeeping-through-participation**: pure capital alone cannot rea
 
 ## 2. Contract topology
 
-Six contracts on Polkadot Hub / Passet Hub via pallet-revive (EVM-compatible):
+Seven contracts on Polkadot Hub / Passet Hub via pallet-revive (EVM-compatible):
 
 ```
                                     ┌─────────────────┐
                                     │  MockStablecoin │  (ERC-20, testnet only)
                                     └────────┬────────┘
-                                             │ stake / slash escrow
+                                             │ stake / slash escrow / oracle bond
                                              ▼
 ┌────────────────┐  writer ┌─────────────────┐  mint/burn ┌─────────────────┐
 │  StakingVault  │────────▶│  PointsLedger   │◀───────────│  VouchRegistry  │
 │  (entry gate)  │  role   │  (source of     │            │ (social layer)  │
 └────────────────┘         │   points truth) │            └─────────────────┘
-                           └────┬──────┬─────┘
+                           └────┬──────┬─────┘    ▲
+                                │      │          │ mint/burn (M-of-N signed)
                                 │      │ getPointsEarnedInWindow
                                 │      │ sumHistoryUpTo   (Layer A)
-                                │      ▼
-                                │   ┌─────────────────┐
-                                │   │ DisputeResolver │──┐
-                                │   └─────────┬───────┘  │ WrongArithmetic + WrongTotalPointsSum
-                                │             │          │ auto-resolve on-chain
-                                ▼             ▼          │
-                        ┌─────────────────┐              │
-                        │  ScoreRegistry  │◀─────────────┘ markDisputed / resolveDispute
-                        │  (optimistic    │
-                        │   snapshot)     │  anchored blockhash  ← Layer A
-                        └─────────────────┘
-                                 ▲
-                                 │ proposeScore (indexer role)
-                     ┌───────────┴───────────┐
-                     │  Off-chain indexer    │  ingests contract events + OpenGov
-                     │  (TypeScript, SQLite) │  computes canonical score, submits
-                     └───────────────────────┘
+                                │      ▼          │
+                                │   ┌─────────────────┐    ┌──────────────────┐
+                                │   │ DisputeResolver │──┐ │ OracleRegistry   │
+                                │   └─────────┬───────┘  │ │ (M-of-N bonded   │
+                                │             │          │ │  write path)     │
+                                ▼             ▼          │ └──────────────────┘
+                        ┌─────────────────┐              │           ▲
+                        │  ScoreRegistry  │◀─────────────┘           │ ECDSA sigs
+                        │  (optimistic    │◀─────────── proposeScore─┘ from N
+                        │   snapshot)     │  anchored blockhash       │ oracles
+                        └─────────────────┘                           │
+                                                            ┌─────────┴──────────┐
+                                                            │  Oracle network    │
+                                                            │  (TypeScript nodes │
+                                                            │   ingest chain +   │
+                                                            │   OpenGov, sign)   │
+                                                            └────────────────────┘
 ```
 
 Responsibilities — one contract, one job:
 
+- **OracleRegistry** — the M-of-N bonded write path. Holds the authorized writer roles on ScoreRegistry and PointsLedger so no raw indexer key can touch them directly. Every `submitScore` / `submitMint` / `submitBurn` requires ECDSA signatures from M registered oracles (threshold configurable). v1 ships with N=1 / threshold=1 and a single bootstrap oracle; the design absorbs more oracles via `register()` without contract changes. Slashing is admin-only stub in v1, automated fraud-proof in v2+.
 - **StakingVault** — holds tiered stake deposits ($1k / $5k / $10k). Issues tiered point bonuses. Vouch commitments escrow base-stake slices that VouchRegistry can slash on failure.
 - **PointsLedger** — the authoritative on-chain history of signed point deltas. Mints/burns are gated by `WRITER_ROLE`. Maintains per-account balance + append-only `_history[]`. Reads for `getPointsEarnedInWindow` (vouch success gate) and `sumHistoryUpTo` (Layer A dispute).
 - **VouchRegistry** — creates vouches, front-loads vouchee points, resolves on window expiry against PointsLedger's activity sum, slashes committed stake on failure.

@@ -5,6 +5,7 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 import {BaseTest} from "./Base.t.sol";
 import {DisputeResolver} from "../contracts/DisputeResolver.sol";
+import {IDisputeResolver} from "../contracts/interfaces/IDisputeResolver.sol";
 import {IScoreRegistry} from "../contracts/interfaces/IScoreRegistry.sol";
 import {ScoreMath} from "../contracts/lib/ScoreMath.sol";
 import {ScoreRegistry} from "../contracts/ScoreRegistry.sol";
@@ -23,7 +24,7 @@ contract MockStable6 is ERC20 {
 }
 
 contract DisputeResolverTest is BaseTest {
-    function _emptyEvidence() internal pure returns (DisputeResolver.DisputeEvidence memory ev) {
+    function _emptyEvidence() internal pure returns (IDisputeResolver.DisputeEvidence memory ev) {
         ev.merkleProof = new bytes32[](0);
         ev.eventData = "";
         ev.leafData = "";
@@ -40,7 +41,7 @@ contract DisputeResolverTest is BaseTest {
         uint256 bobBefore = stable.balanceOf(BOB);
 
         vm.prank(BOB);
-        dispute.dispute(ALICE, DisputeResolver.ClaimType.WrongArithmetic, _emptyEvidence());
+        dispute.dispute(ALICE, IDisputeResolver.ClaimType.WrongArithmetic, _emptyEvidence());
 
         // Proposal cleared, score corrected.
         IScoreRegistry.ScoreProposal memory p = score.getPendingProposal(ALICE);
@@ -64,7 +65,7 @@ contract DisputeResolverTest is BaseTest {
         uint256 bobBefore = stable.balanceOf(BOB);
 
         vm.prank(BOB);
-        dispute.dispute(ALICE, DisputeResolver.ClaimType.WrongArithmetic, _emptyEvidence());
+        dispute.dispute(ALICE, IDisputeResolver.ClaimType.WrongArithmetic, _emptyEvidence());
 
         // Audit C-1: a losing auto-resolve must NOT early-finalize the
         // proposal — the challenge window is preserved for honest disputers.
@@ -82,10 +83,10 @@ contract DisputeResolverTest is BaseTest {
         vm.prank(INDEXER);
         score.proposeScore(ALICE, 300, 145, bytes32(0), 0, 0, 1);
         vm.prank(BOB);
-        uint64 did = dispute.dispute(ALICE, DisputeResolver.ClaimType.WrongArithmetic, _emptyEvidence());
+        uint64 did = dispute.dispute(ALICE, IDisputeResolver.ClaimType.WrongArithmetic, _emptyEvidence());
 
-        DisputeResolver.Dispute memory d = dispute.getDispute(did);
-        assertEq(uint8(d.status), uint8(DisputeResolver.DisputeStatus.DisputerWins));
+        IDisputeResolver.Dispute memory d = dispute.getDispute(did);
+        assertEq(uint8(d.status), uint8(IDisputeResolver.DisputeStatus.DisputerWins));
         assertEq(d.bond, dispute.DISPUTE_BOND());
         assertEq(d.disputer, BOB);
     }
@@ -97,7 +98,7 @@ contract DisputeResolverTest is BaseTest {
         score.proposeScore(ALICE, 100, 50, bytes32(0), 0, 0, 1);
 
         vm.prank(BOB);
-        uint64 did = dispute.dispute(ALICE, DisputeResolver.ClaimType.MissingEvent, _emptyEvidence());
+        uint64 did = dispute.dispute(ALICE, IDisputeResolver.ClaimType.MissingEvent, _emptyEvidence());
 
         vm.prank(GOV);
         dispute.resolveDispute(did, true, 120, 60);
@@ -105,15 +106,15 @@ contract DisputeResolverTest is BaseTest {
         (uint64 s,) = score.getScore(ALICE);
         assertEq(s, 120);
 
-        DisputeResolver.Dispute memory d = dispute.getDispute(did);
-        assertEq(uint8(d.status), uint8(DisputeResolver.DisputeStatus.DisputerWins));
+        IDisputeResolver.Dispute memory d = dispute.getDispute(did);
+        assertEq(uint8(d.status), uint8(IDisputeResolver.DisputeStatus.DisputerWins));
     }
 
     function test_governance_resolvesInProposerFavor() public {
         vm.prank(INDEXER);
         score.proposeScore(ALICE, 100, 50, bytes32(0), 0, 0, 1);
         vm.prank(BOB);
-        uint64 did = dispute.dispute(ALICE, DisputeResolver.ClaimType.MissingEvent, _emptyEvidence());
+        uint64 did = dispute.dispute(ALICE, IDisputeResolver.ClaimType.MissingEvent, _emptyEvidence());
 
         vm.prank(GOV);
         dispute.resolveDispute(did, false, 0, 0);
@@ -126,9 +127,9 @@ contract DisputeResolverTest is BaseTest {
         vm.prank(INDEXER);
         score.proposeScore(ALICE, 300, 145, bytes32(0), 0, 0, 1);
         vm.prank(BOB);
-        uint64 did = dispute.dispute(ALICE, DisputeResolver.ClaimType.WrongArithmetic, _emptyEvidence());
+        uint64 did = dispute.dispute(ALICE, IDisputeResolver.ClaimType.WrongArithmetic, _emptyEvidence());
 
-        vm.expectRevert(DisputeResolver.NotOpen.selector);
+        vm.expectRevert(IDisputeResolver.NotOpen.selector);
         vm.prank(GOV);
         dispute.resolveDispute(did, true, 0, 0);
     }
@@ -137,11 +138,11 @@ contract DisputeResolverTest is BaseTest {
         vm.prank(INDEXER);
         score.proposeScore(ALICE, 100, 50, bytes32(0), 0, 0, 1);
         vm.prank(BOB);
-        uint64 did = dispute.dispute(ALICE, DisputeResolver.ClaimType.MissingEvent, _emptyEvidence());
+        uint64 did = dispute.dispute(ALICE, IDisputeResolver.ClaimType.MissingEvent, _emptyEvidence());
 
         vm.prank(GOV);
         dispute.resolveDispute(did, true, 0, 0);
-        vm.expectRevert(DisputeResolver.NotOpen.selector);
+        vm.expectRevert(IDisputeResolver.NotOpen.selector);
         vm.prank(GOV);
         dispute.resolveDispute(did, true, 0, 0);
     }
@@ -150,9 +151,9 @@ contract DisputeResolverTest is BaseTest {
         vm.prank(INDEXER);
         score.proposeScore(ALICE, 100, 50, bytes32(0), 0, 0, 1);
         vm.prank(BOB);
-        uint64 did = dispute.dispute(ALICE, DisputeResolver.ClaimType.MissingEvent, _emptyEvidence());
+        uint64 did = dispute.dispute(ALICE, IDisputeResolver.ClaimType.MissingEvent, _emptyEvidence());
 
-        vm.expectRevert(DisputeResolver.NotGovernance.selector);
+        vm.expectRevert(IDisputeResolver.NotGovernance.selector);
         vm.prank(CARA);
         dispute.resolveDispute(did, true, 0, 0);
     }
@@ -160,21 +161,21 @@ contract DisputeResolverTest is BaseTest {
     // ─────────────────────── Preconditions ───────────────────────
 
     function test_dispute_noPendingReverts() public {
-        vm.expectRevert(DisputeResolver.NoPendingProposal.selector);
+        vm.expectRevert(IDisputeResolver.NoPendingProposal.selector);
         vm.prank(BOB);
-        dispute.dispute(ALICE, DisputeResolver.ClaimType.MissingEvent, _emptyEvidence());
+        dispute.dispute(ALICE, IDisputeResolver.ClaimType.MissingEvent, _emptyEvidence());
     }
 
     function test_dispute_doubleReverts() public {
         vm.prank(INDEXER);
         score.proposeScore(ALICE, 100, 50, bytes32(0), 0, 0, 1);
         vm.prank(BOB);
-        dispute.dispute(ALICE, DisputeResolver.ClaimType.MissingEvent, _emptyEvidence());
+        dispute.dispute(ALICE, IDisputeResolver.ClaimType.MissingEvent, _emptyEvidence());
 
         // Second dispute: proposal is now Disputed, not Pending.
-        vm.expectRevert(DisputeResolver.NoPendingProposal.selector);
+        vm.expectRevert(IDisputeResolver.NoPendingProposal.selector);
         vm.prank(CARA);
-        dispute.dispute(ALICE, DisputeResolver.ClaimType.MissingEvent, _emptyEvidence());
+        dispute.dispute(ALICE, IDisputeResolver.ClaimType.MissingEvent, _emptyEvidence());
     }
 
     function test_dispute_afterWindowReverts() public {
@@ -182,9 +183,9 @@ contract DisputeResolverTest is BaseTest {
         score.proposeScore(ALICE, 100, 50, bytes32(0), 0, 0, 1);
         vm.roll(block.number + score.CHALLENGE_WINDOW() + 1);
 
-        vm.expectRevert(DisputeResolver.WindowClosed.selector);
+        vm.expectRevert(IDisputeResolver.WindowClosed.selector);
         vm.prank(BOB);
-        dispute.dispute(ALICE, DisputeResolver.ClaimType.MissingEvent, _emptyEvidence());
+        dispute.dispute(ALICE, IDisputeResolver.ClaimType.MissingEvent, _emptyEvidence());
     }
 
     // ─────────────────────── InvalidEvent Merkle proof ───────────────────────
@@ -200,7 +201,7 @@ contract DisputeResolverTest is BaseTest {
         bytes memory bogus = "not-a-real-leaf";
         bytes32 bogusHash = keccak256(bogus);
 
-        DisputeResolver.DisputeEvidence memory ev = _emptyEvidence();
+        IDisputeResolver.DisputeEvidence memory ev = _emptyEvidence();
         ev.leafData = bogus;
         ev.leafHash = bogusHash;
         ev.leafIndex = 0;
@@ -208,9 +209,9 @@ contract DisputeResolverTest is BaseTest {
         ev.merkleProof[0] = leafB;
         ev.disqualifyingReason = "fabricated";
 
-        vm.expectRevert(DisputeResolver.BadInclusionProof.selector);
+        vm.expectRevert(IDisputeResolver.BadInclusionProof.selector);
         vm.prank(BOB);
-        dispute.dispute(ALICE, DisputeResolver.ClaimType.InvalidEvent, ev);
+        dispute.dispute(ALICE, IDisputeResolver.ClaimType.InvalidEvent, ev);
     }
 
     function test_invalidEvent_leafHashMismatchReverts() public {
@@ -223,16 +224,16 @@ contract DisputeResolverTest is BaseTest {
         vm.prank(INDEXER);
         score.proposeScore(ALICE, 100, 50, root, 2, 0, 1);
 
-        DisputeResolver.DisputeEvidence memory ev = _emptyEvidence();
+        IDisputeResolver.DisputeEvidence memory ev = _emptyEvidence();
         ev.leafData = leafData;
         ev.leafHash = wrongHash; // deliberately wrong
         ev.leafIndex = 0;
         ev.merkleProof = new bytes32[](1);
         ev.merkleProof[0] = leafB;
 
-        vm.expectRevert(DisputeResolver.LeafHashMismatch.selector);
+        vm.expectRevert(IDisputeResolver.LeafHashMismatch.selector);
         vm.prank(BOB);
-        dispute.dispute(ALICE, DisputeResolver.ClaimType.InvalidEvent, ev);
+        dispute.dispute(ALICE, IDisputeResolver.ClaimType.InvalidEvent, ev);
     }
 
     function test_invalidEvent_validProofOpensDispute() public {
@@ -244,7 +245,7 @@ contract DisputeResolverTest is BaseTest {
         vm.prank(INDEXER);
         score.proposeScore(ALICE, 100, 50, root, 2, 0, 1);
 
-        DisputeResolver.DisputeEvidence memory ev = _emptyEvidence();
+        IDisputeResolver.DisputeEvidence memory ev = _emptyEvidence();
         ev.leafData = leafData;
         ev.leafHash = leafHash;
         ev.leafIndex = 0;
@@ -253,10 +254,10 @@ contract DisputeResolverTest is BaseTest {
         ev.disqualifyingReason = "amount_below_minimum";
 
         vm.prank(BOB);
-        uint64 did = dispute.dispute(ALICE, DisputeResolver.ClaimType.InvalidEvent, ev);
+        uint64 did = dispute.dispute(ALICE, IDisputeResolver.ClaimType.InvalidEvent, ev);
 
-        DisputeResolver.Dispute memory d = dispute.getDispute(did);
-        assertEq(uint8(d.status), uint8(DisputeResolver.DisputeStatus.Open));
+        IDisputeResolver.Dispute memory d = dispute.getDispute(did);
+        assertEq(uint8(d.status), uint8(IDisputeResolver.DisputeStatus.Open));
 
         vm.prank(GOV);
         dispute.resolveDispute(did, true, 0, 0);
@@ -310,7 +311,7 @@ contract DisputeResolverTest is BaseTest {
         uint256 bobBefore = stable.balanceOf(BOB);
 
         vm.prank(BOB);
-        dispute.dispute(ALICE, DisputeResolver.ClaimType.WrongTotalPointsSum, _emptyEvidence());
+        dispute.dispute(ALICE, IDisputeResolver.ClaimType.WrongTotalPointsSum, _emptyEvidence());
 
         // Score is corrected to what the ledger actually says.
         (uint64 onchain,) = score.getScore(ALICE);
@@ -322,11 +323,7 @@ contract DisputeResolverTest is BaseTest {
         assertEq(uint8(p.status), uint8(IScoreRegistry.ProposalStatus.None));
 
         // Bond + reward to disputer (pool is funded in BaseTest).
-        assertEq(
-            stable.balanceOf(BOB),
-            bobBefore - dispute.DISPUTE_BOND() + dispute.DISPUTE_REWARD(),
-            "disputer paid"
-        );
+        assertEq(stable.balanceOf(BOB), bobBefore - dispute.DISPUTE_BOND() + dispute.DISPUTE_REWARD(), "disputer paid");
     }
 
     /// @notice If the posted `totalPoints` matches ledger sum, the dispute
@@ -347,7 +344,7 @@ contract DisputeResolverTest is BaseTest {
         uint256 bobBefore = stable.balanceOf(BOB);
 
         vm.prank(BOB);
-        dispute.dispute(ALICE, DisputeResolver.ClaimType.WrongTotalPointsSum, _emptyEvidence());
+        dispute.dispute(ALICE, IDisputeResolver.ClaimType.WrongTotalPointsSum, _emptyEvidence());
 
         // Proposal stays pending — honest challenge window preserved.
         IScoreRegistry.ScoreProposal memory p = score.getPendingProposal(ALICE);
@@ -375,7 +372,7 @@ contract DisputeResolverTest is BaseTest {
         score.proposeScore(ALICE, ScoreMath.computeScore(100), 100, bytes32(0), 0, anchor, 1);
 
         vm.prank(BOB);
-        dispute.dispute(ALICE, DisputeResolver.ClaimType.WrongTotalPointsSum, _emptyEvidence());
+        dispute.dispute(ALICE, IDisputeResolver.ClaimType.WrongTotalPointsSum, _emptyEvidence());
 
         (uint64 onchain,) = score.getScore(ALICE);
         assertEq(onchain, ScoreMath.computeScore(70), "signed sum subtracts burn");
@@ -393,10 +390,10 @@ contract DisputeResolverTest is BaseTest {
         score.proposeScore(ALICE, ScoreMath.computeScore(200), 200, bytes32(0), 0, anchor, 1);
 
         vm.prank(BOB);
-        uint64 did = dispute.dispute(ALICE, DisputeResolver.ClaimType.WrongTotalPointsSum, _emptyEvidence());
+        uint64 did = dispute.dispute(ALICE, IDisputeResolver.ClaimType.WrongTotalPointsSum, _emptyEvidence());
 
         // Already auto-resolved → governance touches it at their peril.
-        vm.expectRevert(DisputeResolver.NotOpen.selector);
+        vm.expectRevert(IDisputeResolver.NotOpen.selector);
         vm.prank(GOV);
         dispute.resolveDispute(did, true, 0, 0);
     }
@@ -411,7 +408,7 @@ contract DisputeResolverTest is BaseTest {
 
         // Bob files a bad-faith WrongArithmetic claim (arithmetic is actually right).
         vm.prank(BOB);
-        dispute.dispute(ALICE, DisputeResolver.ClaimType.WrongArithmetic, _emptyEvidence());
+        dispute.dispute(ALICE, IDisputeResolver.ClaimType.WrongArithmetic, _emptyEvidence());
 
         // Proposal remains disputable and unfinalized.
         IScoreRegistry.ScoreProposal memory p = score.getPendingProposal(ALICE);
@@ -421,7 +418,7 @@ contract DisputeResolverTest is BaseTest {
 
         // A subsequent honest disputer can now contest and win via governance.
         vm.prank(CARA);
-        uint64 did2 = dispute.dispute(ALICE, DisputeResolver.ClaimType.MissingEvent, _emptyEvidence());
+        uint64 did2 = dispute.dispute(ALICE, IDisputeResolver.ClaimType.MissingEvent, _emptyEvidence());
 
         vm.prank(GOV);
         dispute.resolveDispute(did2, true, 250, 200);
@@ -448,7 +445,7 @@ contract DisputeResolverTest is BaseTest {
     function test_regression_C2_ctorRejectsHugeDecimals() public {
         MockStable6 usdc = new MockStable6();
         ScoreRegistry s2 = new ScoreRegistry(ADMIN, INDEXER);
-        vm.expectRevert(DisputeResolver.DecimalsOutOfRange.selector);
+        vm.expectRevert(IDisputeResolver.DecimalsOutOfRange.selector);
         new DisputeResolver(ADMIN, address(s2), address(ledger), address(usdc), TREASURY, 31);
     }
 
@@ -480,9 +477,9 @@ contract DisputeResolverTest is BaseTest {
 
         // Two concurrent MissingEvent disputes (don't auto-resolve).
         vm.prank(BOB);
-        uint64 did1 = d2.dispute(ALICE, DisputeResolver.ClaimType.MissingEvent, _emptyEvidence());
+        uint64 did1 = d2.dispute(ALICE, IDisputeResolver.ClaimType.MissingEvent, _emptyEvidence());
         vm.prank(CARA);
-        uint64 did2 = d2.dispute(BOB, DisputeResolver.ClaimType.MissingEvent, _emptyEvidence());
+        uint64 did2 = d2.dispute(BOB, IDisputeResolver.ClaimType.MissingEvent, _emptyEvidence());
 
         assertEq(d2.reservedBonds(), uint256(BOND) * 2, "both bonds reserved");
         assertEq(stable.balanceOf(address(d2)), uint256(BOND) * 2, "contract holds both bonds");
@@ -517,9 +514,9 @@ contract DisputeResolverTest is BaseTest {
         score.proposeScore(BOB, 100, 50, bytes32(0), 0, 0, 1);
 
         vm.prank(BOB);
-        uint64 did1 = dispute.dispute(ALICE, DisputeResolver.ClaimType.MissingEvent, _emptyEvidence());
+        uint64 did1 = dispute.dispute(ALICE, IDisputeResolver.ClaimType.MissingEvent, _emptyEvidence());
         vm.prank(CARA);
-        uint64 did2 = dispute.dispute(BOB, DisputeResolver.ClaimType.MissingEvent, _emptyEvidence());
+        uint64 did2 = dispute.dispute(BOB, IDisputeResolver.ClaimType.MissingEvent, _emptyEvidence());
 
         assertEq(dispute.reservedBonds(), uint256(BOND) * 2);
 
@@ -549,16 +546,16 @@ contract DisputeResolverTest is BaseTest {
         bytes memory leafData = "real-leaf";
         bytes32 leafHash = keccak256(leafData);
 
-        DisputeResolver.DisputeEvidence memory ev = _emptyEvidence();
+        IDisputeResolver.DisputeEvidence memory ev = _emptyEvidence();
         ev.leafData = leafData;
         ev.leafHash = leafHash;
         ev.leafIndex = 2; // == eventCount → out of range
         ev.merkleProof = new bytes32[](1);
         ev.merkleProof[0] = leafB;
 
-        vm.expectRevert(DisputeResolver.LeafIndexOutOfBounds.selector);
+        vm.expectRevert(IDisputeResolver.LeafIndexOutOfBounds.selector);
         vm.prank(BOB);
-        dispute.dispute(ALICE, DisputeResolver.ClaimType.InvalidEvent, ev);
+        dispute.dispute(ALICE, IDisputeResolver.ClaimType.InvalidEvent, ev);
     }
 
     /// @notice H-2 sanity: bond is released from reservedBonds on governance loss too.
@@ -569,7 +566,7 @@ contract DisputeResolverTest is BaseTest {
         score.proposeScore(ALICE, 100, 50, bytes32(0), 0, 0, 1);
 
         vm.prank(BOB);
-        uint64 did = dispute.dispute(ALICE, DisputeResolver.ClaimType.MissingEvent, _emptyEvidence());
+        uint64 did = dispute.dispute(ALICE, IDisputeResolver.ClaimType.MissingEvent, _emptyEvidence());
         assertEq(dispute.reservedBonds(), BOND);
 
         vm.prank(GOV);

@@ -5,6 +5,7 @@ import {Test} from "forge-std/Test.sol";
 
 import {BaseTest} from "./Base.t.sol";
 import {DisputeResolver} from "../contracts/DisputeResolver.sol";
+import {IDisputeResolver} from "../contracts/interfaces/IDisputeResolver.sol";
 import {IScoreRegistry} from "../contracts/interfaces/IScoreRegistry.sol";
 import {PointsLedger} from "../contracts/PointsLedger.sol";
 import {ScoreMath} from "../contracts/lib/ScoreMath.sol";
@@ -94,11 +95,7 @@ contract LayerATest is BaseTest {
         // reason "vouch_penalty" and should subtract from the signed sum.
         vm.prank(INDEXER);
         ledger.burnLockedPoints(ALICE, 40, syntheticVouchId);
-        assertEq(
-            ledger.sumHistoryUpTo(ALICE, uint64(block.number)),
-            int64(60),
-            "burnLockedPoints lowers signed sum"
-        );
+        assertEq(ledger.sumHistoryUpTo(ALICE, uint64(block.number)), int64(60), "burnLockedPoints lowers signed sum");
     }
 
     // ========================================================================
@@ -122,7 +119,7 @@ contract LayerATest is BaseTest {
         vm.roll(block.number + 500);
         // One block older than the window: blockhash returns 0.
         uint64 tooOld = uint64(block.number - 257);
-        vm.expectRevert(ScoreRegistry.StaleSourceBlock.selector);
+        vm.expectRevert(IScoreRegistry.StaleSourceBlock.selector);
         vm.prank(INDEXER);
         score.proposeScore(ALICE, 100, 50, bytes32(0), 0, tooOld, 1);
     }
@@ -130,7 +127,7 @@ contract LayerATest is BaseTest {
     function test_propose_anchor_futureBlockReverts() public {
         vm.roll(block.number + 10);
         uint64 future = uint64(block.number + 1);
-        vm.expectRevert(ScoreRegistry.FutureSourceBlock.selector);
+        vm.expectRevert(IScoreRegistry.FutureSourceBlock.selector);
         vm.prank(INDEXER);
         score.proposeScore(ALICE, 100, 50, bytes32(0), 0, future, 1);
     }
@@ -140,7 +137,7 @@ contract LayerATest is BaseTest {
         // `>=` guard rejects it as FutureSourceBlock up-front.
         vm.roll(block.number + 10);
         uint64 current = uint64(block.number);
-        vm.expectRevert(ScoreRegistry.FutureSourceBlock.selector);
+        vm.expectRevert(IScoreRegistry.FutureSourceBlock.selector);
         vm.prank(INDEXER);
         score.proposeScore(ALICE, 100, 50, bytes32(0), 0, current, 1);
     }
@@ -180,12 +177,12 @@ contract LayerATest is BaseTest {
         vm.prank(INDEXER);
         score.proposeScore(ALICE, 100, 50, bytes32(0), 0, anchor, 1);
 
-        DisputeResolver.DisputeEvidence memory ev;
+        IDisputeResolver.DisputeEvidence memory ev;
         ev.merkleProof = new bytes32[](0);
         ev.eventData = "";
         ev.leafData = "";
         vm.prank(BOB);
-        uint64 did = dispute.dispute(ALICE, DisputeResolver.ClaimType.MissingEvent, ev);
+        uint64 did = dispute.dispute(ALICE, IDisputeResolver.ClaimType.MissingEvent, ev);
 
         vm.prank(GOV);
         dispute.resolveDispute(did, true, 120, 60);
@@ -208,14 +205,14 @@ contract LayerATest is BaseTest {
         vm.prank(INDEXER);
         uint64 pid = score.proposeScore(ALICE, 0, 0, bytes32(0), 0, anchor, 1);
 
-        DisputeResolver.DisputeEvidence memory ev;
+        IDisputeResolver.DisputeEvidence memory ev;
         ev.merkleProof = new bytes32[](0);
 
         uint256 bobBefore = stable.balanceOf(BOB);
         uint256 treasuryBefore = stable.balanceOf(TREASURY);
 
         vm.prank(BOB);
-        dispute.dispute(ALICE, DisputeResolver.ClaimType.WrongTotalPointsSum, ev);
+        dispute.dispute(ALICE, IDisputeResolver.ClaimType.WrongTotalPointsSum, ev);
 
         // Proposal stays pending (C-1 pattern preserved).
         IScoreRegistry.ScoreProposal memory p = score.getPendingProposal(ALICE);
@@ -235,11 +232,11 @@ contract LayerATest is BaseTest {
         vm.prank(INDEXER);
         score.proposeScore(ALICE, ScoreMath.computeScore(100), 100, bytes32(0), 0, anchor, 1);
 
-        DisputeResolver.DisputeEvidence memory ev;
+        IDisputeResolver.DisputeEvidence memory ev;
         ev.merkleProof = new bytes32[](0);
 
         vm.prank(BOB);
-        dispute.dispute(ALICE, DisputeResolver.ClaimType.WrongTotalPointsSum, ev);
+        dispute.dispute(ALICE, IDisputeResolver.ClaimType.WrongTotalPointsSum, ev);
 
         // Score corrected to 0 (zero-sum -> 0 score).
         (uint64 onchain,) = score.getScore(ALICE);
@@ -263,7 +260,7 @@ contract LayerATest is BaseTest {
         vm.roll(block.number + 2);
         _mint(ALICE, 500, "loan_band");
 
-        DisputeResolver.DisputeEvidence memory ev;
+        IDisputeResolver.DisputeEvidence memory ev;
         ev.merkleProof = new bytes32[](0);
 
         // Disputer files WrongTotalPointsSum on the already-submitted proposal.
@@ -271,7 +268,7 @@ contract LayerATest is BaseTest {
         // sum up to anchor = 50 (the after-anchor mint at +500 is excluded).
         // So the 50-claim is HONEST -> disputer loses.
         vm.prank(BOB);
-        dispute.dispute(ALICE, DisputeResolver.ClaimType.WrongTotalPointsSum, ev);
+        dispute.dispute(ALICE, IDisputeResolver.ClaimType.WrongTotalPointsSum, ev);
 
         IScoreRegistry.ScoreProposal memory p = score.getPendingProposal(ALICE);
         assertEq(uint8(p.status), uint8(IScoreRegistry.ProposalStatus.Pending), "proposal honest");
@@ -291,11 +288,11 @@ contract LayerATest is BaseTest {
         vm.prank(INDEXER);
         score.proposeScore(ALICE, 50, 50, bytes32(0), 0, anchor, 1);
 
-        DisputeResolver.DisputeEvidence memory ev;
+        IDisputeResolver.DisputeEvidence memory ev;
         ev.merkleProof = new bytes32[](0);
 
         vm.prank(BOB);
-        dispute.dispute(ALICE, DisputeResolver.ClaimType.WrongTotalPointsSum, ev);
+        dispute.dispute(ALICE, IDisputeResolver.ClaimType.WrongTotalPointsSum, ev);
 
         // Corrected score = computeScore(-70) = 0 (SPEC clamps negatives).
         (uint64 onchain,) = score.getScore(ALICE);
@@ -315,11 +312,11 @@ contract LayerATest is BaseTest {
         vm.prank(INDEXER);
         score.proposeScore(ALICE, 100, 100, bytes32(0), 0, anchor, 1);
 
-        DisputeResolver.DisputeEvidence memory ev;
+        IDisputeResolver.DisputeEvidence memory ev;
         ev.merkleProof = new bytes32[](0);
 
         vm.prank(BOB);
-        dispute.dispute(ALICE, DisputeResolver.ClaimType.WrongTotalPointsSum, ev);
+        dispute.dispute(ALICE, IDisputeResolver.ClaimType.WrongTotalPointsSum, ev);
 
         // Corrected score = computeScore(250) per canonical curve.
         (uint64 onchain,) = score.getScore(ALICE);
@@ -352,13 +349,13 @@ contract LayerATest is BaseTest {
         vm.prank(INDEXER);
         score.proposeScore(ALICE, ScoreMath.computeScore(75), 75, bytes32(0), 0, anchor2, 1);
 
-        DisputeResolver.DisputeEvidence memory ev;
+        IDisputeResolver.DisputeEvidence memory ev;
         ev.merkleProof = new bytes32[](0);
 
         // Disputer files against the current (superseding) proposal. Actual
         // sum up to anchor2 = 75 -> matches proposal -> disputer loses.
         vm.prank(BOB);
-        dispute.dispute(ALICE, DisputeResolver.ClaimType.WrongTotalPointsSum, ev);
+        dispute.dispute(ALICE, IDisputeResolver.ClaimType.WrongTotalPointsSum, ev);
 
         IScoreRegistry.ScoreProposal memory p = score.getPendingProposal(ALICE);
         assertEq(uint8(p.status), uint8(IScoreRegistry.ProposalStatus.Pending), "newer proposal honest");

@@ -9,25 +9,25 @@ contract ScoreRegistryTest is BaseTest {
     // ─────────────────────── Access + validation ───────────────────────
 
     function test_propose_onlyIndexer() public {
-        vm.expectRevert(ScoreRegistry.NotIndexer.selector);
+        vm.expectRevert(IScoreRegistry.NotIndexer.selector);
         vm.prank(ALICE);
         score.proposeScore(ALICE, 100, 50, bytes32(0), 0, 0, 1);
     }
 
     function test_propose_rejectsOverMax() public {
-        vm.expectRevert(ScoreRegistry.ScoreOverMax.selector);
+        vm.expectRevert(IScoreRegistry.ScoreOverMax.selector);
         vm.prank(INDEXER);
         score.proposeScore(ALICE, 851, 500, bytes32(0), 0, 0, 1);
     }
 
     function test_propose_rejectsFutureSourceBlock() public {
-        vm.expectRevert(ScoreRegistry.FutureSourceBlock.selector);
+        vm.expectRevert(IScoreRegistry.FutureSourceBlock.selector);
         vm.prank(INDEXER);
         score.proposeScore(ALICE, 100, 50, bytes32(0), 0, uint64(block.number + 1), 1);
     }
 
     function test_propose_rejectsZeroAccount() public {
-        vm.expectRevert(ScoreRegistry.ZeroAddress.selector);
+        vm.expectRevert(IScoreRegistry.ZeroAddress.selector);
         vm.prank(INDEXER);
         score.proposeScore(address(0), 100, 50, bytes32(0), 0, 0, 1);
     }
@@ -36,7 +36,7 @@ contract ScoreRegistryTest is BaseTest {
 
     function test_propose_rejectsCurrentBlockAsSource() public {
         // sourceBlockHeight == block.number must revert — `blockhash(current)` is 0.
-        vm.expectRevert(ScoreRegistry.FutureSourceBlock.selector);
+        vm.expectRevert(IScoreRegistry.FutureSourceBlock.selector);
         vm.prank(INDEXER);
         score.proposeScore(ALICE, 100, 50, bytes32(0), 0, uint64(block.number), 1);
     }
@@ -45,7 +45,7 @@ contract ScoreRegistryTest is BaseTest {
         // Advance well past the 256-block blockhash horizon from block 0.
         vm.roll(block.number + 300);
         // An anchor at block 0 is now stale — `blockhash(0)` returns 0.
-        vm.expectRevert(ScoreRegistry.StaleSourceBlock.selector);
+        vm.expectRevert(IScoreRegistry.StaleSourceBlock.selector);
         vm.prank(INDEXER);
         score.proposeScore(ALICE, 100, 50, bytes32(0), 0, 0, 1);
     }
@@ -103,7 +103,7 @@ contract ScoreRegistryTest is BaseTest {
     function test_finalize_windowOpenReverts() public {
         vm.prank(INDEXER);
         score.proposeScore(ALICE, 100, 50, bytes32(0), 0, 0, 1);
-        vm.expectRevert(ScoreRegistry.WindowOpen.selector);
+        vm.expectRevert(IScoreRegistry.WindowOpen.selector);
         score.finalizeScore(ALICE);
     }
 
@@ -136,7 +136,7 @@ contract ScoreRegistryTest is BaseTest {
         vm.roll(block.number + score.MIN_PROPOSAL_INTERVAL() - 1);
         // After MIN_PROPOSAL_INTERVAL ≈ 1800 blocks we're outside the 256-block
         // blockhash horizon, so the anchor must be a recent block.
-        vm.expectRevert(ScoreRegistry.TooSoon.selector);
+        vm.expectRevert(IScoreRegistry.TooSoon.selector);
         vm.prank(INDEXER);
         score.proposeScore(ALICE, 110, 55, bytes32(0), 0, uint64(block.number - 1), 1);
     }
@@ -166,7 +166,7 @@ contract ScoreRegistryTest is BaseTest {
         score.setIndexer(newIndexer);
 
         // Old indexer rejected.
-        vm.expectRevert(ScoreRegistry.NotIndexer.selector);
+        vm.expectRevert(IScoreRegistry.NotIndexer.selector);
         vm.prank(INDEXER);
         score.proposeScore(ALICE, 100, 50, bytes32(0), 0, 0, 1);
 
@@ -182,7 +182,7 @@ contract ScoreRegistryTest is BaseTest {
     }
 
     function test_markDisputed_requiresResolver() public {
-        vm.expectRevert(ScoreRegistry.NotDisputeResolver.selector);
+        vm.expectRevert(IScoreRegistry.NotDisputeResolver.selector);
         vm.prank(ALICE);
         score.markDisputed(ALICE, 1);
     }

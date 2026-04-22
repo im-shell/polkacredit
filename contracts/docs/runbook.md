@@ -171,7 +171,22 @@ Environment overrides (`.env.local` in `frontend/`):
 VITE_CHAIN_ID=420420417   # default: 420420417 (Passet Hub)
 VITE_API_URL=http://localhost:4000   # default
 VITE_RPC_URL=https://eth-rpc-testnet.polkadot.io/
+
+# Optional: enable the WalletConnect v2 QR-code path for mobile wallets
+# (Nova, Talisman mobile, SubWallet mobile, MetaMask mobile, Rainbow, etc).
+# Register a project at https://cloud.reown.com and paste the ID below.
+# Leave empty to hide the QR button — browser extensions still work.
+VITE_WALLETCONNECT_PROJECT_ID=
 ```
+
+### Wallet connection options
+
+On the landing card the UI shows whichever transports are available:
+
+- **"Connect Wallet"** — uses the browser-injected provider (`window.ethereum`). Works with Talisman / SubWallet / MetaMask extensions. Fast and always offered if an extension is installed.
+- **"QR"** — WalletConnect v2 pairing. Hidden unless `VITE_WALLETCONNECT_PROJECT_ID` is set. Clicking opens WalletConnect's built-in modal with a QR code for mobile wallets.
+
+Once connected, a **"Disconnect"** button appears in the header. For WalletConnect sessions this tears down the pairing cleanly; for injected wallets the app forgets the session locally (the extension keeps its own permission until you revoke it in the wallet UI).
 
 Visit `http://localhost:5173`. V1 is read-only — shows score, pending proposals, history. Writes (stake, vouch, dispute) happen via direct RPC — for now:
 

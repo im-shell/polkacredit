@@ -44,8 +44,7 @@ contract Deploy is Script {
         d.vault = new StakingVault(deployer, address(d.stable), address(d.ledger), treasury, 18);
         d.vouch = new VouchRegistry(deployer, address(d.ledger), address(d.vault));
         d.score = new ScoreRegistry(deployer, indexer);
-        d.dispute =
-            new DisputeResolver(deployer, address(d.score), address(d.ledger), address(d.stable), treasury, 18);
+        d.dispute = new DisputeResolver(deployer, address(d.score), address(d.ledger), address(d.stable), treasury, 18);
 
         d.ledger.setAuthorized(address(d.vault), true);
         d.ledger.setAuthorized(address(d.vouch), true);

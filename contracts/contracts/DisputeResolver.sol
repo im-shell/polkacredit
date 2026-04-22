@@ -5,6 +5,7 @@ import {Ownable, Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
+import {IDisputeResolver} from "./interfaces/IDisputeResolver.sol";
 import {IPointsLedger} from "./interfaces/IPointsLedger.sol";
 import {IScoreRegistry} from "./interfaces/IScoreRegistry.sol";
 import {Merkle} from "./lib/Merkle.sol";
@@ -16,70 +17,8 @@ import {ScoreMath} from "./lib/ScoreMath.sol";
 ///         two claim types (`MissingEvent`, `InvalidEvent`) are resolved by a
 ///         governance multisig in v1, with the Merkle inclusion proof already
 ///         verified on-chain before the multisig touches them.
-contract DisputeResolver is Ownable2Step {
+contract DisputeResolver is IDisputeResolver, Ownable2Step {
     using SafeERC20 for IERC20;
-
-    error ZeroAddress();
-    error DecimalsOutOfRange();
-    error NotGovernance();
-    error NoPendingProposal();
-    error WindowClosed();
-    error AlreadyDisputed();
-    error LeafHashMismatch();
-    error LeafIndexOutOfBounds();
-    error BadInclusionProof();
-    error NotOpen();
-    error AutoResolves();
-
-    enum ClaimType {
-        MissingEvent,
-        InvalidEvent,
-        WrongArithmetic,
-        /// @notice The proposal's `totalPoints` doesn't match the signed sum of
-        ///         `PointsLedger._history[account]` up to `sourceBlockHeight`.
-        ///         Auto-resolves on-chain — no governance or evidence needed.
-        WrongTotalPointsSum
-    }
-
-    enum DisputeStatus {
-        None,
-        Open,
-        DisputerWins,
-        ProposerWins
-    }
-
-    /// @dev Evidence for MissingEvent / InvalidEvent / WrongArithmetic claims.
-    ///      Fields not relevant to the claim type may be left zero.
-    struct DisputeEvidence {
-        // MissingEvent:
-        uint32 eventSourceChain;
-        uint64 eventBlockNumber;
-        uint32 eventIndex;
-        bytes eventData;
-        int64 expectedPoints;
-        string expectedReasonCode;
-        // InvalidEvent:
-        bytes32[] merkleProof;
-        uint32 leafIndex;
-        bytes leafData; // raw leaf bytes the disputer claims is in the tree
-        bytes32 leafHash; // keccak256(leafData) — stored to avoid recomputing
-        string disqualifyingReason;
-        // WrongArithmetic:
-        int64 claimedCorrectPoints;
-        uint64 claimedCorrectScore;
-    }
-
-    struct Dispute {
-        uint64 id;
-        address account;
-        uint64 proposalId;
-        address disputer;
-        uint128 bond;
-        ClaimType claimType;
-        DisputeStatus status;
-        uint64 createdAt;
-        uint64 resolvedAt;
-    }
 
     /// @notice Dispute bond, scaled to the stablecoin's decimals in the ctor.
     ///         $10 nominal. Refunded on win, forfeited on loss.

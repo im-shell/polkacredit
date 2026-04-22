@@ -6,11 +6,12 @@
   "treasury": "0xBDc78d9918EC565Fb482041D469C3e17090058C3",
   "rpcUrl": "https://eth-rpc-testnet.polkadot.io/",
   "contracts": {
-    "MockStablecoin": "0x123fb4acd1bcabd7b21c61a91aa49b63a49849ca",
-    "PointsLedger": "0x2b37c1ef393512634f50709d3fccda755e641262",
-    "StakingVault": "0x4380b1dbd2599ea5281b28151cdc5e7dfb6b151e",
-    "VouchRegistry": "0x71ac78f767f20ed1ac98267770d2fe3dcd4d2903",
-    "ScoreRegistry": "0x77a6d53eb6bade7af647baecc1ee35b3b0c89c12",
-    "DisputeResolver": "0x9074db69265cc179733d5a8716369d265527cae6"
+    "MockStablecoin": "0x43105b06cee7d927ea7e1671bfa547b5d070980f",
+    "PointsLedger": "0x2595639f179a0a09bb7b2842033919bc51807bf7",
+    "StakingVault": "0xc85ddc6942e4cb597c76e6fed493c3e98fbbe9b7",
+    "VouchRegistry": "0x06d4ec4d603a8b05fd3d422d996dec850cf2e60a",
+    "ScoreRegistry": "0x68e7854b53b8f66b8b936530aa31d75ddd92a4aa",
+    "DisputeResolver": "0x94a5b3cc2cdf23472ba4e74ad9e26024166d1a28",
+    "OracleRegistry": "0xb1143a1c0b37e0627311fb90b394f42c0dfdaf66"
   }
 }
