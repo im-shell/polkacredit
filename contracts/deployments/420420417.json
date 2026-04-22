@@ -1,0 +1,16 @@
+{
+  "chainId": 420420417,
+  "network": "passetHub",
+  "deployer": "0xBDc78d9918EC565Fb482041D469C3e17090058C3",
+  "indexer": "0xBDc78d9918EC565Fb482041D469C3e17090058C3",
+  "treasury": "0xBDc78d9918EC565Fb482041D469C3e17090058C3",
+  "rpcUrl": "https://eth-rpc-testnet.polkadot.io/",
+  "contracts": {
+    "MockStablecoin": "0x123fb4acd1bcabd7b21c61a91aa49b63a49849ca",
+    "PointsLedger": "0x2b37c1ef393512634f50709d3fccda755e641262",
+    "StakingVault": "0x4380b1dbd2599ea5281b28151cdc5e7dfb6b151e",
+    "VouchRegistry": "0x71ac78f767f20ed1ac98267770d2fe3dcd4d2903",
+    "ScoreRegistry": "0x77a6d53eb6bade7af647baecc1ee35b3b0c89c12",
+    "DisputeResolver": "0x9074db69265cc179733d5a8716369d265527cae6"
+  }
+}

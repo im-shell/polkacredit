@@ -270,8 +270,8 @@ This is the only way to prove absence of events without a social watchtower assu
 
 ### Not in any version (explicit non-goals)
 
-- **Score transfers / delegations.** Scores are soulbound to a popId. No secondary market.
-- **Cross-chain identity aggregation.** A popId is a single Polkadot Hub address. Linking other chains (Ethereum, Cosmos) is deliberately out.
+- **Score transfers / delegations.** Scores are soulbound to an account address. No secondary market.
+- **Cross-chain identity aggregation.** An account is a single Polkadot Hub EVM address. Linking other chains (Ethereum, Cosmos) is deliberately out. The earlier `popId` / `PopId.sol` abstraction — intended as a wrapper to allow non-EVM identities — was removed as unused; if cross-chain ever becomes in-scope it needs a dedicated design.
 - **Subjective reputation signals.** No "trust weights", no friend-of-friend scoring. The SPEC is mechanical.
 
 ## 10. Decisions summary
