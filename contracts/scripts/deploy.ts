@@ -125,7 +125,7 @@ async function main() {
   ) => {
     const hash = await submit();
     await publicClient.waitForTransactionReceipt({ hash, timeout: 180_000 });
-    console.log(`  ${label} ✓`);
+    console.log(`  ok: ${label}`);
   };
 
   // OracleRegistry now holds the writer roles that the raw indexer address

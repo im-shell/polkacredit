@@ -1,9 +1,9 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
-/// @title Dispute Resolver Interface
-/// @author Sameer Kumar
-/// @notice Interface for the DisputeResolver contract
+/// @title IDisputeResolver
+/// @notice Types shared between DisputeResolver and off-chain consumers
+///         (indexer, UI).
 interface IDisputeResolver {
     error ZeroAddress();
     error DecimalsOutOfRange();

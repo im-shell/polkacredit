@@ -10,12 +10,11 @@ import {IPointsLedger} from "./interfaces/IPointsLedger.sol";
 import {IStakingVault} from "./interfaces/IStakingVault.sol";
 
 /// @title StakingVault
-/// @author Sameer Kumar
 /// @notice Entry gate to PolkaCredit. Holds tiered stablecoin deposits
 ///         ($1k / $5k / $10k per SPEC.md §2.1). Tier is fixed at first stake.
-///         Per-vouch committed amounts are bookkeept so VouchRegistry can
-///         slash (on failure) or release (on success) a specific commitment
-///         without unwinding the whole stake.
+///         Per-vouch committed amounts are tracked so VouchRegistry can slash
+///         (on failure) or release (on success) a specific commitment without
+///         unwinding the whole stake.
 contract StakingVault is IStakingVault, Ownable2Step, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
@@ -65,16 +64,12 @@ contract StakingVault is IStakingVault, Ownable2Step, ReentrancyGuard {
         tier10k = 10_000 * unit;
     }
 
-    /// @notice Set the vouch registry address
-    /// @param _vouchRegistry The new vouch registry address
     function setVouchRegistry(address _vouchRegistry) external onlyOwner {
         if (_vouchRegistry == address(0)) revert ZeroAddress();
         vouchRegistry = _vouchRegistry;
         emit VouchRegistrySet(_vouchRegistry);
     }
 
-    /// @notice Set the treasury address
-    /// @param _treasury The new treasury address
     function setTreasury(address _treasury) external onlyOwner {
         if (_treasury == address(0)) revert ZeroAddress();
         treasury = _treasury;
@@ -83,16 +78,10 @@ contract StakingVault is IStakingVault, Ownable2Step, ReentrancyGuard {
 
     // ---- Tier math ----
 
-    /// @notice Check if the given amount is a valid stake tier
-    /// @param amount The amount to check
-    /// @return True if the amount is a valid stake tier, false otherwise
     function isValidStakeTier(uint96 amount) public view returns (bool) {
         return amount == tier1k || amount == tier5k || amount == tier10k;
     }
 
-    /// @notice Get the points for a given stake amount
-    /// @param amount The amount to get points for
-    /// @return The points for the given amount
     function tierPoints(uint96 amount) public view returns (uint64) {
         if (amount == tier10k) return POINTS_10K;
         if (amount == tier5k) return POINTS_5K;
@@ -124,9 +113,8 @@ contract StakingVault is IStakingVault, Ownable2Step, ReentrancyGuard {
         emit Staked(msg.sender, amount, pts, uint32(block.number));
     }
 
-    /**
-     * @notice Unstake stablecoin, burn points, and delete staking record
-     */
+    /// @notice Return principal to the staker. Only callable once the lock
+    ///         has expired AND there are no open vouches or committed slices.
     function unstake() external nonReentrant {
         StakeRecord memory s = _stakes[msg.sender];
         if (s.amount == 0) revert NoStake();
@@ -142,15 +130,11 @@ contract StakingVault is IStakingVault, Ownable2Step, ReentrancyGuard {
 
     // ---- Vouch hooks (VouchRegistry only) ----
 
-    /// @notice Extend the lock for a user
-    /// @param who The user to extend the lock for
     function extendLock(address who) external onlyVouchRegistry {
         if (_stakes[who].amount == 0) revert NoStake();
         _stakes[who].isLocked = true;
     }
 
-    /// @notice Release the lock for a user
-    /// @param who The user to release the lock for
     function releaseLock(address who) external onlyVouchRegistry {
         _stakes[who].isLocked = false;
     }
@@ -188,16 +172,10 @@ contract StakingVault is IStakingVault, Ownable2Step, ReentrancyGuard {
 
     // ---- Views ----
 
-    /// @notice Get the stake record for a user
-    /// @param who The user to get the stake record for
-    /// @return The stake record for the user
     function getStake(address who) external view returns (StakeRecord memory) {
         return _stakes[who];
     }
 
-    /// @notice Check if a user has an active stake
-    /// @param who The user to check
-    /// @return True if the user has an active stake, false otherwise
     function hasActiveStake(address who) external view returns (bool) {
         return _stakes[who].amount > 0;
     }
