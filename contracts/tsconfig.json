@@ -1,13 +1,15 @@
 {
   "compilerOptions": {
-    "target": "es2022",
+    "target": "ES2022",
     "module": "commonjs",
-    "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
+    "moduleResolution": "node",
     "strict": true,
+    "esModuleInterop": true,
     "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "outDir": "dist"
   },
-  "include": ["./scripts", "./test", "./typechain-types", "./hardhat.config.ts"]
+  "include": ["hardhat.config.ts", "scripts/**/*.ts"],
+  "exclude": ["node_modules", "lib", "test", "out", "cache", "cache_hardhat", "artifacts"]
 }

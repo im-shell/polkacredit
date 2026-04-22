@@ -1,0 +1,57 @@
+[profile.default]
+src = "contracts"
+out = "out"
+test = "test"
+cache_path = "cache"
+libs = ["lib"]
+solc_version = "0.8.30"
+optimizer = true
+optimizer_runs = 200
+via_ir = false
+verbosity = 2
+gas_reports = ["ScoreRegistry", "DisputeResolver", "PointsLedger", "StakingVault", "VouchRegistry"]
+fs_permissions = [{ access = "read", path = "./" }]
+evm_version = "paris"
+
+[lint]
+# Point-amounts are capped at int64.max off-chain — narrowing casts are safe.
+# The keccak256 asm suggestion is a micro-optimization we don't need.
+exclude_lints = [
+    "unsafe-typecast",
+    "asm-keccak256",
+    "unwrapped-modifier-logic",
+    "screaming-snake-case-immutable",
+]
+ignore = ["lib/**", "test/**"]
+
+[profile.ci]
+verbosity = 3
+fuzz = { runs = 1024 }
+invariant = { runs = 256, depth = 32 }
+
+[fmt]
+line_length = 120
+tab_width = 4
+bracket_spacing = false
+int_types = "long"
+multiline_func_header = "attributes_first"
+quote_style = "double"
+number_underscore = "preserve"
+hex_underscore = "remove"
+single_line_statement_blocks = "preserve"
+override_spacing = false
+wrap_comments = false
+ignore = ["lib/**"]
+
+[rpc_endpoints]
+# Polkadot Hub (AssetHub) — mainnet. Native Solidity via pallet-revive.
+polkadot_hub = "https://eth-rpc.polkadot.io/"
+# Passet Hub — Paseo AssetHub testnet.
+passet_hub = "https://eth-rpc-testnet.polkadot.io/"
+# Kusama Hub — mainnet.
+kusama_hub = "https://eth-rpc-kusama.polkadot.io/"
+
+[etherscan]
+polkadot_hub = { key = "", url = "https://blockscout.polkadot.io/api?" }
+passet_hub = { key = "", url = "https://blockscout-testnet.polkadot.io/api?" }
+kusama_hub = { key = "", url = "https://blockscout-kusama.polkadot.io/api?" }
