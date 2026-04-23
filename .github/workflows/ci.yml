@@ -1,0 +1,176 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+# Only keep the latest run for a given ref. Earlier in-flight runs on the
+# same branch get cancelled — the last push wins.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least-privilege by default. Individual jobs can opt into writes if/when
+# deployment stages get added below.
+permissions:
+  contents: read
+
+jobs:
+  # ───────────────────────── Contracts ─────────────────────────
+  contracts:
+    name: Contracts (forge test + hardhat compile)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contracts
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Show forge version
+        run: forge --version
+
+      - name: forge build
+        run: forge build --sizes
+
+      - name: forge test
+        run: forge test -vv
+
+      - name: Setup Node (for hardhat)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: contracts/package-lock.json
+
+      - name: npm ci (contracts)
+        run: npm ci
+
+      # Hardhat-compiled artifacts live at contracts/artifacts/**.json. The
+      # frontend's `vite build` generateBundle step reads ABIs from there, so
+      # we publish both the foundry out/ and the hardhat artifacts/ for the
+      # downstream frontend job.
+      - name: hardhat compile
+        run: npx hardhat compile
+
+      - name: Upload contract artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: contract-artifacts
+          path: |
+            contracts/out
+            contracts/artifacts
+          retention-days: 1
+
+  # ───────────────────────── Indexer ──────────────────────────
+  indexer:
+    name: Indexer (typecheck + PG schema)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: indexer
+
+    # Matches docker-compose.yml credentials so local + CI stay aligned.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: polkacredit
+          POSTGRES_PASSWORD: polkacredit
+          POSTGRES_DB: polkacredit
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U polkacredit -d polkacredit"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: indexer/package-lock.json
+
+      - name: npm ci
+        run: npm ci
+
+      - name: Typecheck (tsc --noEmit)
+        run: npx tsc --noEmit
+
+      # Apply schema.sql via psql to catch dialect regressions early. This is
+      # the same schema the indexer runs at boot via initDb() — the CI just
+      # proves it parses cleanly on a real Postgres.
+      - name: Smoke-test schema on Postgres
+        env:
+          PGPASSWORD: polkacredit
+        run: psql -h 127.0.0.1 -U polkacredit -d polkacredit -v ON_ERROR_STOP=1 -f src/db/schema.sql
+
+  # ───────────────────────── Frontend ─────────────────────────
+  frontend:
+    name: Frontend (tsc + vite build)
+    runs-on: ubuntu-latest
+    needs: contracts
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Download contract artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: contract-artifacts
+          path: contracts
+
+      - name: npm ci
+        run: npm ci
+
+      # `npm run build` = `tsc --noEmit && vite build`. The vite config's
+      # generateBundle step reads ABIs from contracts/artifacts/ + deployment
+      # JSON from contracts/deployments/, both of which are now present.
+      - name: Build
+        run: npm run build
+
+      - name: Upload dist bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+          retention-days: 7
+
+  # ───────────────────────── Aggregated status ─────────────────────────
+  # A single passing job to set as the required status check on `main`.
+  ci:
+    name: CI
+    runs-on: ubuntu-latest
+    needs: [contracts, indexer, frontend]
+    if: always()
+    steps:
+      - name: Fail if any upstream job failed
+        if: needs.contracts.result != 'success' || needs.indexer.result != 'success' || needs.frontend.result != 'success'
+        run: |
+          echo "contracts: ${{ needs.contracts.result }}"
+          echo "indexer:   ${{ needs.indexer.result }}"
+          echo "frontend:  ${{ needs.frontend.result }}"
+          exit 1

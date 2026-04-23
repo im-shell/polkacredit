@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import { ethers } from "ethers";
 import type { ContractBundle } from "../lib/contracts";
+import { Section } from "./Section";
 
 /**
- * Vouch tier is read from the user's base stake (SPEC §2.2: committed tier
- * must be ≤ voucher's base stake tier). We default to matching their stake
- * tier exactly so the UI stays single-purpose — no dropdown, no amount field.
+ * Section 02 — Vouch form only. The vouch-relationship list (given + received)
+ * is rendered by <VouchListCard> below this section in the page flow, so
+ * the form stays focused and the list is browsable independently.
  */
-export function VouchCard({
+export function VouchSection({
   bundle,
   account,
   onChange,
@@ -19,8 +20,7 @@ export function VouchCard({
   const [addr, setAddr] = useState("");
   const [stakeAmount, setStakeAmount] = useState<bigint | null>(null);
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
-  const [err, setErr] = useState<string | null>(null);
+  const [flash, setFlash] = useState<{ kind: "ok" | "bad"; msg: string } | null>(null);
 
   useEffect(() => {
     let stop = false;
@@ -34,92 +34,98 @@ export function VouchCard({
     }
     load();
     const h = setInterval(load, 15_000);
-    return () => {
-      stop = true;
-      clearInterval(h);
-    };
+    return () => { stop = true; clearInterval(h); };
   }, [bundle, account]);
 
   const tierInfo = (() => {
     if (stakeAmount === null) return null;
     const n = Number(ethers.formatUnits(stakeAmount, 18));
-    if (n >= 60_000) return { label: "$60,000", points: 70 };
-    if (n >= 30_000) return { label: "$30,000", points: 50 };
-    if (n >= 10_000) return { label: "$10,000", points: 30 };
+    if (n >= 60_000) return { label: "$60,000", points: 70, threshold: "+150 total · +40 non-gov" };
+    if (n >= 30_000) return { label: "$30,000", points: 50, threshold: "+100 total · +30 non-gov" };
+    if (n >= 10_000) return { label: "$10,000", points: 30, threshold: "+50 total · +20 non-gov" };
     return null;
   })();
+  const noStake = stakeAmount !== null && stakeAmount === 0n;
 
-  async function run(fn: () => Promise<string>) {
+  async function submit() {
     setBusy(true);
-    setErr(null);
-    setMsg(null);
+    setFlash(null);
     try {
-      const m = await fn();
-      setMsg(m);
+      const vouchee = ethers.getAddress(addr);
+      const tx = await bundle.vouch.vouch(vouchee, stakeAmount!);
+      const r = await tx.wait();
+      setFlash({ kind: "ok", msg: `Vouch created · tx ${r.hash.slice(0, 10)}…` });
+      setAddr("");
       onChange();
     } catch (e: any) {
-      setErr(e.shortMessage ?? e.message ?? String(e));
+      setFlash({ kind: "bad", msg: e.shortMessage ?? e.message ?? String(e) });
     } finally {
       setBusy(false);
     }
   }
 
-  const noStake = stakeAmount !== null && stakeAmount === 0n;
-
   return (
-    <div className="card">
-      <h2>Vouch</h2>
+    <Section
+      num="02"
+      title="Vouch for a peer"
+      sub={tierInfo ? `${tierInfo.label} tier` : noStake ? "stake required" : ""}
+    >
+      <div className="two">
+        <div>
+          <div className="field">
+            <label>
+              Vouchee address
+              <span className="hint">EIP-55 · 0x…</span>
+            </label>
+            <div className="input">
+              <span className="prefix">0x</span>
+              <input
+                placeholder="bdc78d99…58c3"
+                value={addr.startsWith("0x") ? addr.slice(2) : addr}
+                onChange={(e) => setAddr("0x" + e.target.value.replace(/^0x/i, ""))}
+                disabled={!tierInfo}
+                spellCheck={false}
+              />
+            </div>
+          </div>
 
-      {tierInfo ? (
-        <div className="row">
-          <span className="k">Your vouch tier</span>
-          <span className="v">
-            {tierInfo.label} → +{tierInfo.points} pts each on success
-          </span>
+          <div className="kv">
+            <span className="k">Tier</span>
+            <span className="v">
+              {tierInfo ? `${tierInfo.label} · +${tierInfo.points} pts each side` : "—"}
+            </span>
+          </div>
+          <div className="kv">
+            <span className="k">Success gate</span>
+            <span className="v">{tierInfo?.threshold ?? "—"}</span>
+          </div>
+          <div className="kv">
+            <span className="k">Window</span>
+            <span className="v">6 months · indexer auto-resolves</span>
+          </div>
+
+          <div className="rowActions">
+            <button
+              className="btn primary arrow"
+              disabled={busy || !addr || !tierInfo}
+              onClick={submit}
+            >
+              Open vouch
+            </button>
+            {noStake && <span className="hint">stake first to unlock vouching</span>}
+          </div>
+
+          {flash && <div className={`flash ${flash.kind}`}>{flash.msg}</div>}
         </div>
-      ) : noStake ? (
-        <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 8 }}>
-          Stake first to unlock vouching — your stake tier determines your vouch tier.
+
+        <div style={{ fontSize: 13, color: "var(--text-2)" }}>
+          Vouch escrows your committed stake for 6 months against this address and snapshots their
+          ledger position. No points are minted at open — reward is deferred. After the window, the
+          indexer calls <code>resolveVouch</code>: if the vouchee's in-window delta clears the tier
+          threshold (<em>total</em> + <em>non-gov subgate</em>, SPEC §2.3), both sides are credited
+          and your stake returns. Otherwise the commit is slashed to treasury.
         </div>
-      ) : (
-        <div style={{ fontSize: 13, color: "var(--muted)" }}>Loading stake…</div>
-      )}
-
-      <div className="field">
-        <label>Vouchee EVM address</label>
-        <input
-          placeholder="0x…"
-          value={addr}
-          onChange={(e) => setAddr(e.target.value)}
-          disabled={!tierInfo}
-        />
       </div>
-
-      <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 8 }}>
-        Escrows your stake amount against this vouch for 6 months and snapshots
-        the vouchee's score. No points are minted at vouch-open — reward is
-        deferred. After the window (plus a brief grace period) the indexer
-        automatically resolves: if the vouchee's score grew by ≥50 during the
-        window, both sides are credited and your stake returns. Otherwise your
-        committed stake is slashed to treasury.
-      </div>
-
-      <button
-        disabled={busy || !addr || !tierInfo || !stakeAmount}
-        onClick={() =>
-          run(async () => {
-            const vouchee = ethers.getAddress(addr);
-            const tx = await bundle.vouch.vouch(vouchee, stakeAmount!);
-            const r = await tx.wait();
-            return `Vouch created in tx ${r.hash.slice(0, 10)}…`;
-          })
-        }
-      >
-        Vouch
-      </button>
-
-      {msg && <div className="banner ok" style={{ marginTop: 12 }}>{msg}</div>}
-      {err && <div className="banner err" style={{ marginTop: 12 }}>{err}</div>}
-    </div>
+    </Section>
   );
 }

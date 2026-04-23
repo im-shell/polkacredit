@@ -15,10 +15,21 @@ import {
   type Eip1193,
   type WalletKind,
 } from "./lib/wallet";
+import { short } from "./lib/address";
+import { registerAccount } from "./lib/indexerApi";
+import { Connect } from "./components/Connect";
+import { Overview } from "./components/ScoreCard";
+import { StakeSection } from "./components/StakeCard";
+import { VouchSection } from "./components/VouchCard";
+import { VouchListCard } from "./components/VouchListCard";
+import { LedgerSection } from "./components/PointsHistoryCard";
+import { FaucetSection } from "./components/FaucetCard";
 
-/// Persisted WalletKind for silent reconnect on page refresh. Cleared on
-/// explicit disconnect. Survives browser restarts (localStorage).
-const LAST_WALLET_KEY = "sampo:lastWalletKind";
+/**
+ * Persisted WalletKind for silent reconnect on page refresh. Cleared on
+ * explicit disconnect. Survives browser restarts (localStorage).
+ */
+const LAST_WALLET_KEY = "polkacredit:lastWalletKind";
 function readLastWallet(): WalletKind | null {
   if (typeof window === "undefined") return null;
   const v = window.localStorage.getItem(LAST_WALLET_KEY);
@@ -29,15 +40,6 @@ function writeLastWallet(kind: WalletKind | null) {
   if (kind) window.localStorage.setItem(LAST_WALLET_KEY, kind);
   else window.localStorage.removeItem(LAST_WALLET_KEY);
 }
-import { short } from "./lib/address";
-import { registerAccount } from "./lib/indexerApi";
-import { Connect } from "./components/Connect";
-import { ScoreCard } from "./components/ScoreCard";
-import { StakeCard } from "./components/StakeCard";
-import { VouchCard } from "./components/VouchCard";
-import { VouchListCard } from "./components/VouchListCard";
-import { PointsHistoryCard } from "./components/PointsHistoryCard";
-import { FaucetCard } from "./components/FaucetCard";
 
 export default function App() {
   const [conn, setConn] = useState<Connection | null>(null);
@@ -46,54 +48,36 @@ export default function App() {
   const [bundle, setBundle] = useState<ContractBundle | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
-  // One-shot per session: try auto-switching to the target chain. If the
-  // user rejects or the wallet throws, we set this true so we don't spam
-  // the prompt. The "Switch network" banner stays as a manual fallback.
+  const [head, setHead] = useState<number>(0);
   const [autoSwitchTried, setAutoSwitchTried] = useState(false);
 
-  // Silent reconnect on mount: if the user connected in a prior session and
-  // that provider still has permission (injected) or an active session
-  // (WalletConnect), reuse it without re-prompting.
+  // Silent reconnect on mount.
   useEffect(() => {
     const last = readLastWallet();
     if (!last) return;
     let cancelled = false;
     (async () => {
       try {
-        const c =
-          last === "walletconnect"
-            ? await silentConnectWalletConnect()
-            : await silentConnectInjected();
+        const c = last === "walletconnect"
+          ? await silentConnectWalletConnect()
+          : await silentConnectInjected();
         if (cancelled || !c) return;
-        setConn(c);
-        setAddress(c.address);
-        setChainId(c.chainId);
-      } catch {
-        // fall through — user will see the Connect button
-      }
+        setConn(c); setAddress(c.address); setChainId(c.chainId);
+      } catch {}
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
   const netName = chainId ? NETWORKS[chainId]?.name ?? `chain ${chainId}` : null;
   const onRightChain = chainId === CHAIN_ID;
   const wcEnabled = hasWalletConnect();
 
-  // Subscribe to account / chain / disconnect events on the currently active
-  // EIP-1193 provider. Re-runs when the connection changes so switching
-  // between injected and WalletConnect re-binds cleanly.
   useEffect(() => {
     if (!conn) return;
     return bindEvents(conn.eip1193 as Eip1193, {
       onAccounts: (accs) => {
-        if (!accs.length) {
-          // User disconnected from the wallet side — mirror that locally.
-          handleDisconnect();
-        } else {
-          setAddress(accs[0]);
-        }
+        if (!accs.length) handleDisconnect();
+        else setAddress(accs[0]);
       },
       onChain: (cid) => setChainId(cid),
       onDisconnect: () => handleDisconnect(),
@@ -101,7 +85,6 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conn]);
 
-  // Build the contract bundle once we have both an address and the right chain.
   useEffect(() => {
     if (!conn || !address || !onRightChain) {
       setBundle(null);
@@ -117,17 +100,11 @@ export default function App() {
     })();
   }, [conn, address, onRightChain, reloadKey]);
 
-  // Ping the indexer on every address change so it can store the H160 ↔
-  // 32-byte-AccountId32 mapping and start attributing this user's
-  // OpenGov votes. Best-effort — the UI doesn't gate on it.
   useEffect(() => {
     if (!address) return;
     registerAccount(address);
   }, [address]);
 
-  // Auto-switch to the target chain once per session when connected but on
-  // the wrong chain. First-time Talisman users who already have Passet Hub
-  // added get a near-silent switch; otherwise the wallet prompts to add it.
   useEffect(() => {
     if (!conn || !address || onRightChain || autoSwitchTried) return;
     setAutoSwitchTried(true);
@@ -135,20 +112,31 @@ export default function App() {
       try {
         await switchChain(conn.eip1193, CHAIN_ID);
         setChainId(CHAIN_ID);
-      } catch {
-        // user declined or chain not addable — manual banner remains
-      }
+      } catch {}
     })();
   }, [conn, address, onRightChain, autoSwitchTried]);
+
+  // Poll chain head every 4s for the live tag in the page header (DESIGN §7).
+  useEffect(() => {
+    if (!bundle) return;
+    let stop = false;
+    async function tick() {
+      try {
+        const b = await bundle!.provider.getBlockNumber();
+        if (!stop) setHead(b);
+      } catch {}
+    }
+    tick();
+    const h = setInterval(tick, 4000);
+    return () => { stop = true; clearInterval(h); };
+  }, [bundle]);
 
   async function doConnect(kind: WalletKind) {
     try {
       setErr(null);
       const c = kind === "walletconnect" ? await connectWalletConnect() : await connectInjected();
-      setConn(c);
-      setAddress(c.address);
-      setChainId(c.chainId);
-      setAutoSwitchTried(false); // fresh connect → allow one auto-switch attempt
+      setConn(c); setAddress(c.address); setChainId(c.chainId);
+      setAutoSwitchTried(false);
       writeLastWallet(kind);
     } catch (e: any) {
       setErr(e.message ?? String(e));
@@ -157,18 +145,11 @@ export default function App() {
 
   async function handleDisconnect() {
     const kind = conn?.kind;
-    setConn(null);
-    setAddress(null);
-    setChainId(null);
-    setBundle(null);
+    setConn(null); setAddress(null); setChainId(null); setBundle(null);
     setAutoSwitchTried(false);
     writeLastWallet(null);
     if (kind) {
-      try {
-        await disconnect(kind);
-      } catch {
-        // best-effort — session may already be gone
-      }
+      try { await disconnect(kind); } catch {}
     }
   }
 
@@ -184,120 +165,102 @@ export default function App() {
 
   const refresh = () => setReloadKey((k) => k + 1);
 
-  return (
-    <div className="shell">
-      <header className="top">
-        <h1>
-          <span className="logo-dot" />
-          Sampo
-        </h1>
+  // ─── Connect screen ────────────────────────────────────────────────
+  if (!address) {
+    if (!hasAnyProvider()) {
+      return (
         <Connect
-          address={address}
-          netName={netName}
-          onRightChain={onRightChain}
-          walletKind={conn?.kind ?? null}
-          wcEnabled={wcEnabled}
-          injectedAvailable={hasInjectedProvider()}
-          onConnectInjected={() => doConnect("injected")}
-          onConnectWalletConnect={() => doConnect("walletconnect")}
-          onSwitch={handleSwitch}
-          onDisconnect={handleDisconnect}
+          wcEnabled={false}
+          injectedAvailable={false}
+          onConnectInjected={() => {}}
+          onConnectWalletConnect={() => {}}
+          err="No EVM wallet detected. Install Talisman, SubWallet, or MetaMask — or set VITE_WALLETCONNECT_PROJECT_ID to enable QR login."
         />
-      </header>
+      );
+    }
+    return (
+      <Connect
+        wcEnabled={wcEnabled}
+        injectedAvailable={hasInjectedProvider()}
+        onConnectInjected={() => doConnect("injected")}
+        onConnectWalletConnect={() => doConnect("walletconnect")}
+        err={err}
+      />
+    );
+  }
 
-      {!hasAnyProvider() && (
-        <div className="banner err">
-          No EVM wallet detected. Install a Polkadot-Hub-compatible wallet such
-          as{" "}
-          <a href="https://talisman.xyz" target="_blank" rel="noreferrer">
-            Talisman
-          </a>
-          ,{" "}
-          <a href="https://subwallet.app" target="_blank" rel="noreferrer">
-            SubWallet
-          </a>
-          , or{" "}
-          <a href="https://metamask.io" target="_blank" rel="noreferrer">
-            MetaMask
-          </a>
-          , or set <code>VITE_WALLETCONNECT_PROJECT_ID</code> to enable QR-code
-          login from a mobile wallet.
+  // ─── Connected shell ───────────────────────────────────────────────
+  return (
+    <>
+      <nav className="nav">
+        <div className="brand">
+          <span className="mark" />
+          PolkaCredit
         </div>
-      )}
-
-      {address && !onRightChain && (
-        <div className="banner err">
-          Connected to {netName}. Sampo lives on{" "}
-          <strong>{NETWORKS[CHAIN_ID]?.name ?? `chain ${CHAIN_ID}`}</strong>.{" "}
-          <a onClick={handleSwitch} style={{ cursor: "pointer" }}>
-            Switch network.
-          </a>
+        <div className="tabs">
+          <button className="active">Overview</button>
         </div>
-      )}
+        <div className="spacer" />
+        <div className="chips">
+          <span className="chip">
+            {onRightChain && <span className="pip" />}
+            {!onRightChain && <span className="pip warn" />}
+            {netName ?? "—"}
+          </span>
+          <button className="chip button" onClick={handleDisconnect} title={address}>
+            {short(address)}
+            {conn?.kind === "walletconnect" && <span style={{ marginLeft: 4 }}>· WC</span>}
+          </button>
+        </div>
+      </nav>
 
-      {err && <div className="banner err">{err}</div>}
+      <main className="main">
+        <div className="pageHead">
+          <h1>Your credit</h1>
+          <span className="tag">Soulbound · on {netName}</span>
+          <span className="dot">·</span>
+          <span className="tag">
+            {head > 0 && <span className="pip" style={{
+              display: "inline-block", width: 6, height: 6, borderRadius: 999,
+              background: "var(--accent)",
+              boxShadow: "0 0 0 3px color-mix(in oklch, var(--accent) 22%, transparent)",
+              marginRight: 8, verticalAlign: "middle",
+            }} />}
+            live · block {head.toLocaleString()}
+          </span>
+        </div>
 
-      {!address && (
-        <div className="card" style={{ textAlign: "center", padding: "48px 20px" }}>
-          <p style={{ color: "var(--muted)" }}>
-            Connect your wallet to stake, vouch, and view your on-chain credit score.
-          </p>
-          <div
-            style={{
-              marginTop: 16,
-              display: "flex",
-              gap: 10,
-              justifyContent: "center",
-              flexWrap: "wrap",
-            }}
-          >
-            {hasInjectedProvider() && (
-              <button onClick={() => doConnect("injected")}>Browser wallet</button>
-            )}
-            {wcEnabled && (
-              <button className="ghost" onClick={() => doConnect("walletconnect")}>
-                WalletConnect (QR)
-              </button>
-            )}
-          </div>
-          {!wcEnabled && (
-            <div style={{ marginTop: 12, fontSize: 12, color: "var(--muted)" }}>
-              Mobile QR login is disabled — set{" "}
-              <code>VITE_WALLETCONNECT_PROJECT_ID</code> in{" "}
-              <code>frontend/.env.local</code> to turn it on.
+        {!onRightChain && (
+          <div className="banner">
+            <div className="msg">
+              <span className="pip" />
+              Connected to {netName}. PolkaCredit lives on{" "}
+              <strong style={{ color: "var(--text)" }}>
+                {NETWORKS[CHAIN_ID]?.name ?? `chain ${CHAIN_ID}`}
+              </strong>.
             </div>
-          )}
-        </div>
-      )}
-
-      {address && onRightChain && bundle && (
-        <>
-          <div style={{ marginBottom: 14 }} className="kv">
-            account: {address}
-            {conn?.kind === "walletconnect" && (
-              <span style={{ marginLeft: 8, color: "var(--muted)" }}>· via WalletConnect</span>
-            )}
+            <button className="btn sm ghost" onClick={handleSwitch}>Switch network</button>
           </div>
-          <div className="cards">
-            <ScoreCard bundle={bundle} account={address} key={`score-${reloadKey}`} />
-            <StakeCard bundle={bundle} account={address} onChange={refresh} key={`stake-${reloadKey}`} />
-            <VouchCard bundle={bundle} account={address} onChange={refresh} key={`vouch-${reloadKey}`} />
-            <VouchListCard bundle={bundle} account={address} key={`vouchlist-${reloadKey}`} />
-            <FaucetCard bundle={bundle} address={address} onChange={refresh} />
-            <PointsHistoryCard bundle={bundle} account={address} key={`hist-${reloadKey}`} />
-          </div>
-        </>
-      )}
+        )}
 
-      <div className="footer">
-        Sampo · {NETWORKS[CHAIN_ID]?.name ?? `chain ${CHAIN_ID}`}
-        {bundle && (
+        {err && <div className="flash bad" style={{ marginBottom: 24 }}>{err}</div>}
+
+        {bundle && onRightChain && (
           <>
-            {" · "}
-            <span className="kv">vault {short(bundle.deployment.contracts.StakingVault)}</span>
+            <Overview       bundle={bundle} account={address} key={`ov-${reloadKey}`} />
+            <StakeSection   bundle={bundle} account={address} onChange={refresh} key={`stake-${reloadKey}`} />
+            <VouchSection   bundle={bundle} account={address} onChange={refresh} key={`vouch-${reloadKey}`} />
+            <VouchListCard  bundle={bundle} account={address} key={`vlist-${reloadKey}`} />
+            <LedgerSection  bundle={bundle} account={address} key={`hist-${reloadKey}`} />
+            <FaucetSection  bundle={bundle} address={address} onChange={refresh} />
           </>
         )}
-      </div>
-    </div>
+
+        <div className="footer">
+          <span>PolkaCredit · {NETWORKS[CHAIN_ID]?.name ?? `chain ${CHAIN_ID}`}</span>
+          {bundle && <span>vault {short(bundle.deployment.contracts.StakingVault)}</span>}
+        </div>
+      </main>
+    </>
   );
 }

@@ -1,14 +1,43 @@
 import { useEffect, useState } from "react";
 import type { ContractBundle } from "../lib/contracts";
+import { Section } from "./Section";
 
 interface Entry {
+  idx: number;
   amount: number;
-  timestamp: number;
+  block: number;
   reason: string;
   vouchId: number;
 }
 
-export function PointsHistoryCard({
+const REASON_LABEL: Record<string, string> = {
+  stake_deposit:         "First-stake bonus",
+  stake_first:           "First-stake bonus",
+  vouch_given:           "Vouch given · resolved",
+  vouch_received:        "Vouch received · credited",
+  vouch_penalty:         "Vouch failure · clawback",
+  opengov_vote:          "OpenGov vote attributed",
+  transfer_band:         "Transfer volume · band crossed",
+  transfer_counterparty: "Transfer · new counterparty",
+  loan_band:             "Loan repaid",
+  loan_late_minor:       "Loan late · minor",
+  loan_late_major:       "Loan late · major",
+  loan_partial_default:  "Loan · partial default",
+  loan_full_default:     "Loan · full default",
+  inactivity:            "Inactivity penalty",
+};
+
+function sourceLabel(reason: string): string {
+  if (reason.startsWith("stake_"))   return "StakingVault";
+  if (reason.startsWith("vouch_"))   return "VouchRegistry";
+  if (reason === "opengov_vote")     return "AssetHub OpenGov";
+  if (reason.startsWith("transfer_"))return "Indexer · transfer feed";
+  if (reason.startsWith("loan_"))    return "Indexer · loan feed";
+  if (reason === "inactivity")       return "Indexer · decay job";
+  return "PointsLedger";
+}
+
+export function LedgerSection({
   bundle,
   account,
 }: {
@@ -16,7 +45,6 @@ export function PointsHistoryCard({
   account: string;
 }) {
   const [entries, setEntries] = useState<Entry[]>([]);
-  const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     let stop = false;
@@ -24,6 +52,10 @@ export function PointsHistoryCard({
       try {
         const len: bigint = await bundle.ledger.historyLength(account);
         const n = Number(len);
+        if (n === 0) {
+          if (!stop) setEntries([]);
+          return;
+        }
         const max = Math.min(n, 25);
         const from = n - max;
         const rows = await Promise.all(
@@ -32,41 +64,42 @@ export function PointsHistoryCard({
         if (stop) return;
         setEntries(
           rows
-            .map((r: any) => ({
+            .map((r: any, i: number) => ({
+              idx: from + i,
               amount: Number(r.amount),
-              timestamp: Number(r.timestamp),
+              block: Number(r.timestamp),
               reason: r.reason,
               vouchId: Number(r.relatedVouchId),
             }))
             .reverse()
         );
-      } catch (e: any) {
-        setErr(e.message);
-      }
+      } catch {}
     }
     load();
     const h = setInterval(load, 15_000);
-    return () => {
-      stop = true;
-      clearInterval(h);
-    };
+    return () => { stop = true; clearInterval(h); };
   }, [bundle, account]);
 
   return (
-    <div className="card" style={{ gridColumn: "span 2" }}>
-      <h2>Points history</h2>
-      {err && <div className="banner err">{err}</div>}
+    <Section num="03" title="Points ledger" sub={`${entries.length} shown`}>
       {entries.length === 0 ? (
-        <div style={{ color: "var(--muted)", fontSize: 13 }}>
-          No point events yet. Stake to get started.
-        </div>
+        <div className="empty">No point events yet. Stake to write the first entry.</div>
       ) : (
-        <div className="history">
-          {entries.map((e, i) => (
-            <div className="ev" key={i}>
-              <span className="kv">block {e.timestamp}</span>
-              <span className="reason">{e.reason || "—"}</span>
-              <span className={`amt ${e.amount > 0 ? "pos" : e.amount < 0 ? "neg" : ""}`}>
+        <div className="ledger">
+          <div className="ledgerHead">
+            <span>Idx</span>
+            <span>Event</span>
+            <span>Source</span>
+            <span>Block</span>
+            <span>Δ</span>
+          </div>
+          {entries.map((e) => (
+            <div className="ledgerRow" key={e.idx}>
+              <span className="idx">{e.idx.toString().padStart(3, "0")}</span>
+              <span className="reason">{REASON_LABEL[e.reason] ?? e.reason}</span>
+              <span className="src">{sourceLabel(e.reason)}</span>
+              <span className="blk">{e.block.toLocaleString()}</span>
+              <span className={`delta ${e.amount > 0 ? "pos" : e.amount < 0 ? "neg" : ""}`}>
                 {e.amount > 0 ? "+" : ""}
                 {e.amount}
               </span>
@@ -74,6 +107,6 @@ export function PointsHistoryCard({
           ))}
         </div>
       )}
-    </div>
+    </Section>
   );
 }

@@ -1,60 +1,68 @@
-import { short } from "../lib/address";
-import type { WalletKind } from "../lib/wallet";
+import { CHAIN_ID, NETWORKS } from "../lib/contracts";
 
+/**
+ * Full-viewport split-screen (per DESIGN §6.1): left pane communicates what
+ * the product is, right pane is a wallet list. No card wrap, no auto-connect.
+ */
 export function Connect({
-  address,
-  netName,
-  onRightChain,
-  walletKind,
   wcEnabled,
   injectedAvailable,
   onConnectInjected,
   onConnectWalletConnect,
-  onSwitch,
-  onDisconnect,
+  err,
 }: {
-  address: string | null;
-  netName: string | null;
-  onRightChain: boolean;
-  walletKind: WalletKind | null;
   wcEnabled: boolean;
   injectedAvailable: boolean;
   onConnectInjected: () => void;
   onConnectWalletConnect: () => void;
-  onSwitch: () => void;
-  onDisconnect: () => void;
+  err: string | null;
 }) {
-  if (!address) {
-    // Not connected. Show whichever transports are actually available.
-    // Most users land here with the browser extension path; WalletConnect
-    // appears as a secondary option for mobile-wallet users.
-    return (
-      <div style={{ display: "flex", gap: 8 }}>
-        {injectedAvailable && <button onClick={onConnectInjected}>Connect Wallet</button>}
-        {wcEnabled && (
-          <button className="ghost" onClick={onConnectWalletConnect}>
-            QR
-          </button>
-        )}
-      </div>
-    );
-  }
+  const network = NETWORKS[CHAIN_ID]?.name ?? `chain ${CHAIN_ID}`;
 
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-      <span className="kv">{netName}</span>
-      {!onRightChain && (
-        <button className="ghost" onClick={onSwitch}>
-          Switch network
-        </button>
-      )}
-      <span className="addr" style={{ color: "var(--muted)" }}>
-        {short(address)}
-        {walletKind === "walletconnect" && <span style={{ marginLeft: 4 }}>·WC</span>}
-      </span>
-      <button className="ghost" onClick={onDisconnect} title="Disconnect wallet">
-        Disconnect
-      </button>
+    <div className="connect">
+      <div className="left">
+        <div className="brand">
+          <span style={{
+            width: 10, height: 10, borderRadius: 999,
+            background: "var(--text)",
+            boxShadow: "0 0 0 3px color-mix(in oklch, var(--accent) 18%, transparent)",
+          }} />
+          PolkaCredit
+        </div>
+        <h1 className="headline">
+          Your on-chain <b>credit</b>, portable across Polkadot.
+        </h1>
+        <div className="by">
+          Soulbound · optimistic verification · on {network}
+        </div>
+      </div>
+
+      <div className="right">
+        <div className="title">Sign in</div>
+        <div className="lede">
+          Connect a wallet to stake, vouch, and view your credit score. Nothing happens until you explicitly approve a transaction.
+        </div>
+        <div className="walletList">
+          <button
+            className="walletRow"
+            disabled={!injectedAvailable}
+            onClick={onConnectInjected}
+          >
+            <span className="label">Browser wallet</span>
+            <span className="kind">{injectedAvailable ? "Talisman · SubWallet · MetaMask" : "Not detected"}</span>
+          </button>
+          <button
+            className="walletRow"
+            disabled={!wcEnabled}
+            onClick={onConnectWalletConnect}
+          >
+            <span className="label">WalletConnect</span>
+            <span className="kind">{wcEnabled ? "QR · Mobile wallet" : "Project ID not set"}</span>
+          </button>
+        </div>
+        {err && <div className="err">{err}</div>}
+      </div>
     </div>
   );
 }

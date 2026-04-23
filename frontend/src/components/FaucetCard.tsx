@@ -1,11 +1,13 @@
 import { useMemo, useState } from "react";
 import { ethers } from "ethers";
 import type { ContractBundle } from "../lib/contracts";
+import { Section } from "./Section";
 
-/// The MockStablecoin on testnet/local exposes a permissionless `mint`. This
-/// card gives the user a quick way to grab some mUSD so they can stake.
-/// On a real deployment this card should be removed.
-export function FaucetCard({
+/**
+ * Dev-only: MockStablecoin exposes a permissionless `mint`. This section
+ * doesn't exist on a production deployment.
+ */
+export function FaucetSection({
   bundle,
   address,
   onChange,
@@ -16,8 +18,7 @@ export function FaucetCard({
 }) {
   const [amount, setAmount] = useState("1000");
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
-  const [err, setErr] = useState<string | null>(null);
+  const [flash, setFlash] = useState<{ kind: "ok" | "bad"; msg: string } | null>(null);
 
   const wei = useMemo(() => {
     try {
@@ -30,45 +31,53 @@ export function FaucetCard({
 
   async function drip() {
     setBusy(true);
-    setErr(null);
-    setMsg(null);
+    setFlash(null);
     try {
       const tx = await bundle.stable.mint(address, wei);
       await tx.wait();
-      setMsg(`Minted ${amount.trim()} mUSD.`);
+      setFlash({ kind: "ok", msg: `Minted ${amount.trim()} mUSD.` });
       onChange();
     } catch (e: any) {
-      setErr(e.shortMessage ?? e.message ?? String(e));
+      setFlash({ kind: "bad", msg: e.shortMessage ?? e.message ?? String(e) });
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <div className="card">
-      <h2>mUSD faucet</h2>
-      <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 10 }}>
-        MockStablecoin has a permissionless <code>mint</code> function. Use it to fund your test
-        wallet. This will not exist on a production deployment.
+    <Section num="∞" title="mUSD faucet" sub="dev only">
+      <div className="two">
+        <div>
+          <div className="field">
+            <label>
+              Amount
+              <span className="hint">mUSD · permissionless mint</span>
+            </label>
+            <div className="input">
+              <input
+                type="text"
+                inputMode="decimal"
+                placeholder="1000"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                disabled={busy}
+              />
+              <span className="prefix">mUSD</span>
+            </div>
+          </div>
+          <div className="rowActions">
+            <button className="btn ghost" disabled={busy || !isValid} onClick={drip}>
+              Mint{isValid ? ` ${amount.trim()} mUSD` : " mUSD"}
+            </button>
+          </div>
+          {flash && <div className={`flash ${flash.kind}`}>{flash.msg}</div>}
+        </div>
+        <div style={{ fontSize: 13, color: "var(--text-2)" }}>
+          <code>MockStablecoin.mint(address,uint256)</code> is gated by nothing — any address can
+          mint. Present on local / testnet only. A real deployment swaps in a regulated stablecoin
+          (USDC via Hydra Omnipool, etc.) and drops this component entirely.
+        </div>
       </div>
-      <div className="field">
-        <label>Amount (mUSD)</label>
-        <input
-          type="text"
-          inputMode="decimal"
-          placeholder="1000"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          disabled={busy}
-        />
-      </div>
-      <div className="row-actions">
-        <button disabled={busy || !isValid} onClick={drip}>
-          Mint{isValid ? ` ${amount.trim()} mUSD` : " mUSD"}
-        </button>
-      </div>
-      {msg && <div className="banner ok" style={{ marginTop: 12 }}>{msg}</div>}
-      {err && <div className="banner err" style={{ marginTop: 12 }}>{err}</div>}
-    </div>
+    </Section>
   );
 }
