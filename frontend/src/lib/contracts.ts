@@ -56,9 +56,14 @@ export const NETWORKS: Record<number, { name: string; rpc: string; explorer: str
 let cachedDeployment: Deployment | null = null;
 let cachedAbis: Record<string, any[]> | null = null;
 
+/// Vite sets BASE_URL to the configured `base` (always trailing-slashed).
+/// Using it here means `/deployments/...` and `/abi/...` resolve correctly
+/// whether the bundle is served from `/` (local) or `/<repo>/` (Pages).
+const BASE_URL = import.meta.env.BASE_URL;
+
 export async function loadDeployment(): Promise<Deployment> {
   if (cachedDeployment) return cachedDeployment;
-  const res = await fetch(`/deployments/${CHAIN_ID}.json`);
+  const res = await fetch(`${BASE_URL}deployments/${CHAIN_ID}.json`);
   if (!res.ok) throw new Error(`No deployment for chainId ${CHAIN_ID}`);
   cachedDeployment = (await res.json()) as Deployment;
   return cachedDeployment;
@@ -76,7 +81,7 @@ export async function loadAbis(): Promise<Record<string, any[]>> {
   ];
   const entries = await Promise.all(
     names.map(async (n) => {
-      const r = await fetch(`/abi/${n}.json`);
+      const r = await fetch(`${BASE_URL}abi/${n}.json`);
       if (!r.ok) throw new Error(`Missing ABI for ${n}`);
       const j = await r.json();
       return [n, j.abi] as [string, any[]];

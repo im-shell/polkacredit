@@ -73,9 +73,9 @@ export function FaucetSection({
           {flash && <div className={`flash ${flash.kind}`}>{flash.msg}</div>}
         </div>
         <div style={{ fontSize: 13, color: "var(--text-2)" }}>
-          <code>MockStablecoin.mint(address,uint256)</code> is gated by nothing — any address can
+          <code>MockStablecoin.mint(address,uint256)</code> is gated by nothing - any address can
           mint. Present on local / testnet only. A real deployment swaps in a regulated stablecoin
-          (USDC via Hydra Omnipool, etc.) and drops this component entirely.
+          (USDC or Polkadot USD token) and drops this component entirely.
         </div>
       </div>
     </Section>

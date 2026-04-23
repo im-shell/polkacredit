@@ -34,15 +34,6 @@ function mapScore(pts: number): number {
   return 700 + Math.floor((pts - 700) / 2);
 }
 
-function band(score: number): { label: string; color: "ok" | "warn" | "faint" } {
-  if (score >= 720) return { label: "Prime", color: "ok" };
-  if (score >= 580) return { label: "Strong", color: "ok" };
-  if (score >= 400) return { label: "Building", color: "ok" };
-  if (score >= 200) return { label: "Emerging", color: "warn" };
-  if (score > 0)    return { label: "Nascent",  color: "warn" };
-  return { label: "Unscored", color: "faint" };
-}
-
 export function Overview({ bundle, account }: { bundle: ContractBundle; account: string }) {
   const [finalized, setFinalized]     = useState<number | null>(null);
   const [finalizedAt, setFinalizedAt] = useState<number | null>(null);
@@ -96,7 +87,6 @@ export function Overview({ bundle, account }: { bundle: ContractBundle; account:
   const score = finalized ?? 0;
   const projected = total == null ? 0 : mapScore(total);
   const pct = Math.min(100, (score / 850) * 100);
-  const { label: bandLabel } = band(score);
 
   const isPending = pending && pending.status === ProposalStatus.Pending;
   const blocksLeft = isPending && head > 0
@@ -124,11 +114,6 @@ export function Overview({ bundle, account }: { bundle: ContractBundle; account:
           </div>
         </div>
         <div className="meta">
-          <span className="label">Soulbound</span>
-          <span className="band">
-            {score > 0 && <span className="pip" />}
-            {bandLabel}
-          </span>
           <span className="sub">
             {finalizedAt && finalizedAt > 0
               ? `finalized · block ${finalizedAt.toLocaleString()}`

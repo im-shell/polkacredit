@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Sampo brand mark: ink tile, mint halo ring, off-white dot.
+       Mirrors the .nav .brand .mark treatment in src/styles.css so the
+       tab icon reads as a miniature of the nav chrome. Self-contained
+       ink background so it stays visible on light + dark browser tabs. -->
+  <rect width="32" height="32" rx="7" fill="#1b1c23"/>
+  <circle cx="16" cy="16" r="9" fill="none" stroke="#5ed3aa" stroke-width="2" opacity="0.55"/>
+  <circle cx="16" cy="16" r="5" fill="#f2f1ed"/>
+</svg>

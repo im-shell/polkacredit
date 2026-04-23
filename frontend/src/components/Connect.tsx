@@ -28,7 +28,7 @@ export function Connect({
             background: "var(--text)",
             boxShadow: "0 0 0 3px color-mix(in oklch, var(--accent) 18%, transparent)",
           }} />
-          PolkaCredit
+          Sampo
         </div>
         <h1 className="headline">
           Your on-chain <b>credit</b>, portable across Polkadot.

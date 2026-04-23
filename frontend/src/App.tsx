@@ -29,7 +29,7 @@ import { FaucetSection } from "./components/FaucetCard";
  * Persisted WalletKind for silent reconnect on page refresh. Cleared on
  * explicit disconnect. Survives browser restarts (localStorage).
  */
-const LAST_WALLET_KEY = "polkacredit:lastWalletKind";
+const LAST_WALLET_KEY = "sampo:lastWalletKind";
 function readLastWallet(): WalletKind | null {
   if (typeof window === "undefined") return null;
   const v = window.localStorage.getItem(LAST_WALLET_KEY);
@@ -50,6 +50,7 @@ export default function App() {
   const [reloadKey, setReloadKey] = useState(0);
   const [head, setHead] = useState<number>(0);
   const [autoSwitchTried, setAutoSwitchTried] = useState(false);
+  const [tab, setTab] = useState<"overview" | "stake" | "vouch" | "activity" | "dev">("overview");
 
   // Silent reconnect on mount.
   useEffect(() => {
@@ -195,10 +196,14 @@ export default function App() {
       <nav className="nav">
         <div className="brand">
           <span className="mark" />
-          PolkaCredit
+          Sampo
         </div>
         <div className="tabs">
-          <button className="active">Overview</button>
+          <button className={tab === "overview" ? "active" : ""} onClick={() => setTab("overview")}>Overview</button>
+          <button className={tab === "stake"    ? "active" : ""} onClick={() => setTab("stake")}>Stake</button>
+          <button className={tab === "vouch"    ? "active" : ""} onClick={() => setTab("vouch")}>Vouch</button>
+          <button className={tab === "activity" ? "active" : ""} onClick={() => setTab("activity")}>Activity</button>
+          <button className={tab === "dev"      ? "active" : ""} onClick={() => setTab("dev")}>Dev</button>
         </div>
         <div className="spacer" />
         <div className="chips">
@@ -234,7 +239,7 @@ export default function App() {
           <div className="banner">
             <div className="msg">
               <span className="pip" />
-              Connected to {netName}. PolkaCredit lives on{" "}
+              Connected to {netName}. Sampo lives on{" "}
               <strong style={{ color: "var(--text)" }}>
                 {NETWORKS[CHAIN_ID]?.name ?? `chain ${CHAIN_ID}`}
               </strong>.
@@ -245,19 +250,37 @@ export default function App() {
 
         {err && <div className="flash bad" style={{ marginBottom: 24 }}>{err}</div>}
 
-        {bundle && onRightChain && (
+        {bundle && onRightChain && tab === "overview" && (
           <>
             <Overview       bundle={bundle} account={address} key={`ov-${reloadKey}`} />
             <StakeSection   bundle={bundle} account={address} onChange={refresh} key={`stake-${reloadKey}`} />
             <VouchSection   bundle={bundle} account={address} onChange={refresh} key={`vouch-${reloadKey}`} />
             <VouchListCard  bundle={bundle} account={address} key={`vlist-${reloadKey}`} />
             <LedgerSection  bundle={bundle} account={address} key={`hist-${reloadKey}`} />
-            <FaucetSection  bundle={bundle} address={address} onChange={refresh} />
           </>
         )}
 
+        {bundle && onRightChain && tab === "stake" && (
+          <StakeSection bundle={bundle} account={address} onChange={refresh} key={`stake-${reloadKey}`} />
+        )}
+
+        {bundle && onRightChain && tab === "vouch" && (
+          <>
+            <VouchSection  bundle={bundle} account={address} onChange={refresh} key={`vouch-${reloadKey}`} />
+            <VouchListCard bundle={bundle} account={address} key={`vlist-${reloadKey}`} />
+          </>
+        )}
+
+        {bundle && onRightChain && tab === "activity" && (
+          <LedgerSection bundle={bundle} account={address} key={`hist-${reloadKey}`} />
+        )}
+
+        {bundle && onRightChain && tab === "dev" && (
+          <FaucetSection bundle={bundle} address={address} onChange={refresh} key={`faucet-${reloadKey}`} />
+        )}
+
         <div className="footer">
-          <span>PolkaCredit · {NETWORKS[CHAIN_ID]?.name ?? `chain ${CHAIN_ID}`}</span>
+          <span>Sampo · {NETWORKS[CHAIN_ID]?.name ?? `chain ${CHAIN_ID}`}</span>
           {bundle && <span>vault {short(bundle.deployment.contracts.StakingVault)}</span>}
         </div>
       </main>

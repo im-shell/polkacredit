@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: polkacredit-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: polkacredit
+      POSTGRES_PASSWORD: polkacredit
+      POSTGRES_DB: polkacredit
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - polkacredit_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U polkacredit -d polkacredit"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+
+volumes:
+  polkacredit_pg:

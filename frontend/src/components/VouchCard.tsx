@@ -70,62 +70,50 @@ export function VouchSection({
       title="Vouch for a peer"
       sub={tierInfo ? `${tierInfo.label} tier` : noStake ? "stake required" : ""}
     >
-      <div className="two">
-        <div>
-          <div className="field">
-            <label>
-              Vouchee address
-              <span className="hint">EIP-55 · 0x…</span>
-            </label>
-            <div className="input">
-              <span className="prefix">0x</span>
-              <input
-                placeholder="bdc78d99…58c3"
-                value={addr.startsWith("0x") ? addr.slice(2) : addr}
-                onChange={(e) => setAddr("0x" + e.target.value.replace(/^0x/i, ""))}
-                disabled={!tierInfo}
-                spellCheck={false}
-              />
-            </div>
-          </div>
-
-          <div className="kv">
-            <span className="k">Tier</span>
-            <span className="v">
-              {tierInfo ? `${tierInfo.label} · +${tierInfo.points} pts each side` : "—"}
-            </span>
-          </div>
-          <div className="kv">
-            <span className="k">Success gate</span>
-            <span className="v">{tierInfo?.threshold ?? "—"}</span>
-          </div>
-          <div className="kv">
-            <span className="k">Window</span>
-            <span className="v">6 months · indexer auto-resolves</span>
-          </div>
-
-          <div className="rowActions">
-            <button
-              className="btn primary arrow"
-              disabled={busy || !addr || !tierInfo}
-              onClick={submit}
-            >
-              Open vouch
-            </button>
-            {noStake && <span className="hint">stake first to unlock vouching</span>}
-          </div>
-
-          {flash && <div className={`flash ${flash.kind}`}>{flash.msg}</div>}
-        </div>
-
-        <div style={{ fontSize: 13, color: "var(--text-2)" }}>
-          Vouch escrows your committed stake for 6 months against this address and snapshots their
-          ledger position. No points are minted at open — reward is deferred. After the window, the
-          indexer calls <code>resolveVouch</code>: if the vouchee's in-window delta clears the tier
-          threshold (<em>total</em> + <em>non-gov subgate</em>, SPEC §2.3), both sides are credited
-          and your stake returns. Otherwise the commit is slashed to treasury.
+      <div className="field">
+        <label>
+          Vouchee address
+          <span className="hint">EIP-55 · 0x…</span>
+        </label>
+        <div className="input">
+          <span className="prefix">0x</span>
+          <input
+            placeholder="bdc78d99…58c3"
+            value={addr.startsWith("0x") ? addr.slice(2) : addr}
+            onChange={(e) => setAddr("0x" + e.target.value.replace(/^0x/i, ""))}
+            disabled={!tierInfo}
+            spellCheck={false}
+          />
         </div>
       </div>
+
+      <div className="kv">
+        <span className="k">Tier</span>
+        <span className="v">
+          {tierInfo ? `${tierInfo.label} · +${tierInfo.points} pts each side` : "—"}
+        </span>
+      </div>
+      <div className="kv">
+        <span className="k">Success gate</span>
+        <span className="v">{tierInfo?.threshold ?? "—"}</span>
+      </div>
+      <div className="kv">
+        <span className="k">Window</span>
+        <span className="v">6 months · indexer auto-resolves</span>
+      </div>
+
+      <div className="rowActions">
+        <button
+          className="btn primary arrow"
+          disabled={busy || !addr || !tierInfo}
+          onClick={submit}
+        >
+          Open vouch
+        </button>
+        {noStake && <span className="hint">stake first to unlock vouching</span>}
+      </div>
+
+      {flash && <div className={`flash ${flash.kind}`}>{flash.msg}</div>}
     </Section>
   );
 }

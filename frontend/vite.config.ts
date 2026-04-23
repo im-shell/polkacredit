@@ -76,7 +76,19 @@ function contractsAssets() {
   };
 }
 
+/// Pages project sites serve under `/<repo-name>/`. On GitHub Actions the
+/// repo name is available as `GITHUB_REPOSITORY=<owner>/<repo>`; locally
+/// we fall through to `/`. `BASE_PATH` is an explicit override for anything
+/// else (custom CDN, subdir on a static host, etc.).
+const basePath = (() => {
+  if (process.env.BASE_PATH) return process.env.BASE_PATH;
+  const ghRepo = process.env.GITHUB_REPOSITORY;
+  if (ghRepo && ghRepo.includes("/")) return `/${ghRepo.split("/")[1]}/`;
+  return "/";
+})();
+
 export default defineConfig({
+  base: basePath,
   plugins: [react(), contractsAssets()],
   server: { port: 5173 },
   build: {

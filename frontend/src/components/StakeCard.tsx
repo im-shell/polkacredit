@@ -133,7 +133,7 @@ export function StakeSection({
           </div>
           <div style={{ fontSize: 13, color: "var(--text-2)" }}>
             Tier is fixed at first stake. Upgrading requires a full unstake after the 6-month lock.
-            Vouches reserve committed slices of this stake — slashed to treasury on vouch failure per SPEC §3.1.
+            Vouches reserve committed slices of this stake - slashed to treasury on vouch failure.
           </div>
         </div>
       ) : (
