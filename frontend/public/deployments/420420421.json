@@ -1,0 +1,18 @@
+{
+  "chainId": 420420421,
+  "network": "polkadot-stack-template-local",
+  "deployer": "0x7Db69ff49d15E9C0b22a6f1DbC7C6A7f1d6Ba021",
+  "indexer": "0x7Db69ff49d15E9C0b22a6f1DbC7C6A7f1d6Ba021",
+  "rpcUrl": "http://127.0.0.1:8545",
+  "substrateRpcUrl": "ws://127.0.0.1:9944",
+  "contracts": {
+    "MockStablecoin": "0xc01Ee7f10EA4aF4673cFff62710E1D7792aBa8f3",
+    "PointsLedger": "0x970951a12F975E6762482ACA81E57D5A2A4e73F4",
+    "StakingVault": "0x3ed62137c5DB927cb137c26455969116BF0c23Cb",
+    "VouchRegistry": "0x962c0940d72E7Db6c9a5F81f1cA87D8DB2B82A23",
+    "ScoreRegistry": "0x5CC307268a1393AB9A764A20DACE848AB8275c46",
+    "WalletRegistry": "0xeAB4eEBa1FF8504c124D031F6844AD98d07C318f",
+    "DisputeResolver": "0x21cb3940e6Ba5284E1750F1109131a8E8062b9f1"
+  },
+  "note": "Deployed via forge script against the polkadot-stack-template zombienet (pallet-revive + eth-rpc). The deployer is the template's Alice dev account (private key 0x5fb9...2133)."
+}
