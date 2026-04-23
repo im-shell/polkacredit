@@ -1,6 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ethers } from "ethers";
 import type { ContractBundle } from "../lib/contracts";
+
+type Tier = "10k" | "30k" | "60k";
+
+const TIERS: Array<{
+  id: Tier;
+  amountUsd: number;
+  points: number;
+}> = [
+  { id: "10k", amountUsd: 10_000, points: 40 },
+  { id: "30k", amountUsd: 30_000, points: 70 },
+  { id: "60k", amountUsd: 60_000, points: 100 },
+];
 
 export function StakeCard({
   bundle,
@@ -11,7 +23,7 @@ export function StakeCard({
   account: string;
   onChange: () => void;
 }) {
-  const [amount, setAmount] = useState("100");
+  const [selected, setSelected] = useState<Tier>("10k");
   const [stake, setStake] = useState<{ amount: bigint; lockUntil: bigint; isLocked: boolean } | null>(
     null
   );
@@ -59,23 +71,37 @@ export function StakeCard({
     }
   }
 
-  const wei = (() => {
-    try {
-      return ethers.parseUnits(amount || "0", 18);
-    } catch {
-      return 0n;
-    }
-  })();
+  const selectedTier = useMemo(
+    () => TIERS.find((t) => t.id === selected)!,
+    [selected]
+  );
+  const wei = useMemo(
+    () => ethers.parseUnits(String(selectedTier.amountUsd), 18),
+    [selectedTier]
+  );
 
-  const needsApproval = wei > 0n && allowance < wei;
+  const needsApproval = allowance < wei;
   const hasStake = stake && stake.amount > 0n;
   const canUnstake = hasStake && head >= stake!.lockUntil && !stake!.isLocked;
+  const insufficient = stableBal < wei;
+
+  function fmtTierLabel(amount: bigint): string {
+    const n = Number(ethers.formatUnits(amount, 18));
+    if (n >= 60_000) return "$60,000 (+100 pts)";
+    if (n >= 30_000) return "$30,000 (+70 pts)";
+    if (n >= 10_000) return "$10,000 (+40 pts)";
+    return `$${n}`;
+  }
 
   return (
     <div className="card">
       <h2>Staking</h2>
       {hasStake ? (
         <>
+          <div className="row">
+            <span className="k">Tier</span>
+            <span className="v">{fmtTierLabel(stake!.amount)}</span>
+          </div>
           <div className="row">
             <span className="k">Staked</span>
             <span className="v">{ethers.formatUnits(stake!.amount, 18)} mUSD</span>
@@ -119,13 +145,47 @@ export function StakeCard({
             <span className="v">{ethers.formatUnits(stableBal, 18)}</span>
           </div>
           <div className="field">
-            <label>Amount (mUSD, min 50)</label>
-            <input value={amount} onChange={(e) => setAmount(e.target.value)} />
+            <label>Stake tier</label>
+            <div style={{ display: "grid", gap: 8 }}>
+              {TIERS.map((t) => (
+                <label
+                  key={t.id}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    border: "1px solid var(--line, #2a2a2a)",
+                    borderRadius: 8,
+                    padding: "10px 12px",
+                    cursor: "pointer",
+                    background:
+                      selected === t.id ? "var(--accent-bg, rgba(230,0,122,0.08))" : "transparent",
+                  }}
+                >
+                  <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <input
+                      type="radio"
+                      name="stake-tier"
+                      value={t.id}
+                      checked={selected === t.id}
+                      onChange={() => setSelected(t.id)}
+                    />
+                    <strong>${t.amountUsd.toLocaleString()}</strong>
+                  </span>
+                  <span style={{ fontSize: 13, color: "var(--muted)" }}>
+                    +{t.points} pts · 6-month lock
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 8 }}>
+            Tier is fixed at first stake — your vouch tier will match it.
           </div>
           <div className="row-actions">
             {needsApproval ? (
               <button
-                disabled={busy || wei === 0n}
+                disabled={busy}
                 onClick={() =>
                   run(async () => {
                     const tx = await bundle.stable.approve(bundle.vault.target, ethers.MaxUint256);
@@ -138,17 +198,22 @@ export function StakeCard({
               </button>
             ) : (
               <button
-                disabled={busy || wei < ethers.parseUnits("50", 18)}
+                disabled={busy || insufficient}
                 onClick={() =>
                   run(async () => {
                     const tx = await bundle.vault.stake(wei);
                     await tx.wait();
-                    setMsg("Staked.");
+                    setMsg(`Staked $${selectedTier.amountUsd.toLocaleString()}.`);
                   })
                 }
               >
-                Stake
+                Stake ${selectedTier.amountUsd.toLocaleString()}
               </button>
+            )}
+            {insufficient && !needsApproval && (
+              <span style={{ fontSize: 12, color: "var(--muted)", alignSelf: "center" }}>
+                insufficient mUSD — use the faucet
+              </span>
             )}
           </div>
         </>

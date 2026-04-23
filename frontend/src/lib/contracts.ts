@@ -45,6 +45,12 @@ export const NETWORKS: Record<number, { name: string; rpc: string; explorer: str
     explorer: "",
     currency: "DOT",
   },
+  31337: {
+    name: "Anvil (local)",
+    rpc: "http://127.0.0.1:8546",
+    explorer: "",
+    currency: "ETH",
+  },
 };
 
 let cachedDeployment: Deployment | null = null;

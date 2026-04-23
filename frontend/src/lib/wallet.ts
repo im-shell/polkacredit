@@ -63,6 +63,43 @@ export async function connectInjected(): Promise<Connection> {
   return finalizeConnect(window.ethereum!, "injected");
 }
 
+/// Silent reconnect to an injected wallet if the user has previously
+/// authorized this origin. Uses `eth_accounts` (passive) instead of
+/// `eth_requestAccounts` (which always prompts). Returns null if no
+/// pre-approved account is available.
+export async function silentConnectInjected(): Promise<Connection | null> {
+  if (!hasInjectedProvider()) return null;
+  const eip = window.ethereum!;
+  let accounts: string[] = [];
+  try {
+    accounts = ((await eip.request({ method: "eth_accounts" })) as string[]) ?? [];
+  } catch {
+    return null;
+  }
+  if (!accounts.length) return null;
+  const provider = new ethers.BrowserProvider(eip as any, "any");
+  const address = ethers.getAddress(accounts[0]);
+  const network = await provider.getNetwork();
+  const chainId = Number(network.chainId);
+  const signer = await provider.getSigner();
+  return { kind: "injected", provider, signer, address, chainId, eip1193: eip };
+}
+
+/// Silent reconnect to a WalletConnect session if one is still alive in
+/// localStorage. `EthereumProvider.init` rehydrates the session from
+/// storage; we just need to check whether a session is present and, if
+/// so, rebuild the Connection object without re-opening the QR modal.
+export async function silentConnectWalletConnect(): Promise<Connection | null> {
+  if (!hasWalletConnect()) return null;
+  try {
+    const wc = await getWalletConnectProvider();
+    if (!wc.session) return null;
+    return finalizeConnect(wc as unknown as Eip1193, "walletconnect");
+  } catch {
+    return null;
+  }
+}
+
 /// Connect via WalletConnect v2. Shows the library's built-in QR modal for
 /// mobile wallets (Nova, Talisman mobile, SubWallet mobile, MetaMask mobile,
 /// Rainbow, etc). Reuses an active session if one exists.

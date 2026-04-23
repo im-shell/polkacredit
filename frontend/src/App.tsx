@@ -8,16 +8,34 @@ import {
   hasAnyProvider,
   hasInjectedProvider,
   hasWalletConnect,
+  silentConnectInjected,
+  silentConnectWalletConnect,
   switchChain,
   type Connection,
   type Eip1193,
   type WalletKind,
 } from "./lib/wallet";
+
+/// Persisted WalletKind for silent reconnect on page refresh. Cleared on
+/// explicit disconnect. Survives browser restarts (localStorage).
+const LAST_WALLET_KEY = "sampo:lastWalletKind";
+function readLastWallet(): WalletKind | null {
+  if (typeof window === "undefined") return null;
+  const v = window.localStorage.getItem(LAST_WALLET_KEY);
+  return v === "injected" || v === "walletconnect" ? v : null;
+}
+function writeLastWallet(kind: WalletKind | null) {
+  if (typeof window === "undefined") return;
+  if (kind) window.localStorage.setItem(LAST_WALLET_KEY, kind);
+  else window.localStorage.removeItem(LAST_WALLET_KEY);
+}
 import { short } from "./lib/address";
+import { registerAccount } from "./lib/indexerApi";
 import { Connect } from "./components/Connect";
 import { ScoreCard } from "./components/ScoreCard";
 import { StakeCard } from "./components/StakeCard";
 import { VouchCard } from "./components/VouchCard";
+import { VouchListCard } from "./components/VouchListCard";
 import { PointsHistoryCard } from "./components/PointsHistoryCard";
 import { FaucetCard } from "./components/FaucetCard";
 
@@ -32,6 +50,32 @@ export default function App() {
   // user rejects or the wallet throws, we set this true so we don't spam
   // the prompt. The "Switch network" banner stays as a manual fallback.
   const [autoSwitchTried, setAutoSwitchTried] = useState(false);
+
+  // Silent reconnect on mount: if the user connected in a prior session and
+  // that provider still has permission (injected) or an active session
+  // (WalletConnect), reuse it without re-prompting.
+  useEffect(() => {
+    const last = readLastWallet();
+    if (!last) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const c =
+          last === "walletconnect"
+            ? await silentConnectWalletConnect()
+            : await silentConnectInjected();
+        if (cancelled || !c) return;
+        setConn(c);
+        setAddress(c.address);
+        setChainId(c.chainId);
+      } catch {
+        // fall through — user will see the Connect button
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const netName = chainId ? NETWORKS[chainId]?.name ?? `chain ${chainId}` : null;
   const onRightChain = chainId === CHAIN_ID;
@@ -73,6 +117,14 @@ export default function App() {
     })();
   }, [conn, address, onRightChain, reloadKey]);
 
+  // Ping the indexer on every address change so it can store the H160 ↔
+  // 32-byte-AccountId32 mapping and start attributing this user's
+  // OpenGov votes. Best-effort — the UI doesn't gate on it.
+  useEffect(() => {
+    if (!address) return;
+    registerAccount(address);
+  }, [address]);
+
   // Auto-switch to the target chain once per session when connected but on
   // the wrong chain. First-time Talisman users who already have Passet Hub
   // added get a near-silent switch; otherwise the wallet prompts to add it.
@@ -97,6 +149,7 @@ export default function App() {
       setAddress(c.address);
       setChainId(c.chainId);
       setAutoSwitchTried(false); // fresh connect → allow one auto-switch attempt
+      writeLastWallet(kind);
     } catch (e: any) {
       setErr(e.message ?? String(e));
     }
@@ -109,6 +162,7 @@ export default function App() {
     setChainId(null);
     setBundle(null);
     setAutoSwitchTried(false);
+    writeLastWallet(null);
     if (kind) {
       try {
         await disconnect(kind);
@@ -135,7 +189,7 @@ export default function App() {
       <header className="top">
         <h1>
           <span className="logo-dot" />
-          PolkaCredit
+          Sampo
         </h1>
         <Connect
           address={address}
@@ -173,7 +227,7 @@ export default function App() {
 
       {address && !onRightChain && (
         <div className="banner err">
-          Connected to {netName}. PolkaCredit lives on{" "}
+          Connected to {netName}. Sampo lives on{" "}
           <strong>{NETWORKS[CHAIN_ID]?.name ?? `chain ${CHAIN_ID}`}</strong>.{" "}
           <a onClick={handleSwitch} style={{ cursor: "pointer" }}>
             Switch network.
@@ -227,7 +281,8 @@ export default function App() {
           <div className="cards">
             <ScoreCard bundle={bundle} account={address} key={`score-${reloadKey}`} />
             <StakeCard bundle={bundle} account={address} onChange={refresh} key={`stake-${reloadKey}`} />
-            <VouchCard bundle={bundle} onChange={refresh} />
+            <VouchCard bundle={bundle} account={address} onChange={refresh} key={`vouch-${reloadKey}`} />
+            <VouchListCard bundle={bundle} account={address} key={`vouchlist-${reloadKey}`} />
             <FaucetCard bundle={bundle} address={address} onChange={refresh} />
             <PointsHistoryCard bundle={bundle} account={address} key={`hist-${reloadKey}`} />
           </div>
@@ -235,7 +290,7 @@ export default function App() {
       )}
 
       <div className="footer">
-        PolkaCredit · {NETWORKS[CHAIN_ID]?.name ?? `chain ${CHAIN_ID}`}
+        Sampo · {NETWORKS[CHAIN_ID]?.name ?? `chain ${CHAIN_ID}`}
         {bundle && (
           <>
             {" · "}

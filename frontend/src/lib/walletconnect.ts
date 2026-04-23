@@ -50,9 +50,9 @@ export async function getWalletConnectProvider() {
     showQrModal: true,
     // Metadata surfaced to the user in their mobile wallet UI.
     metadata: {
-      name: "PolkaCredit",
+      name: "Sampo",
       description: "On-chain credit scoring on Polkadot Hub",
-      url: typeof window !== "undefined" ? window.location.origin : "https://polkacredit",
+      url: typeof window !== "undefined" ? window.location.origin : "https://sampo.app",
       icons: [],
     },
   }).then((p) => {

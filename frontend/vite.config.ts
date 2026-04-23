@@ -9,7 +9,7 @@ import fs from "node:fs";
 function contractsAssets() {
   const CONTRACTS = path.resolve(__dirname, "..", "contracts");
   return {
-    name: "polkacredit-contracts-assets",
+    name: "sampo-contracts-assets",
     configureServer(server: any) {
       server.middlewares.use((req: any, res: any, next: any) => {
         const url: string = req.url ?? "";
