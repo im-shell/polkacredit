@@ -7,7 +7,7 @@ export async function connectPolkadot(wss: string): Promise<ApiPromise> {
 }
 
 /**
- * Resolve an H160 popId to its canonical 32-byte AccountId32 on AssetHub.
+ * Resolve an H160 account to its canonical 32-byte AccountId32 on AssetHub.
  *
  * Two cases, one query:
  *   1. Native Substrate user who called `map_account` — their real sr25519

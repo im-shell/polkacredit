@@ -7,7 +7,7 @@ const CHALLENGE_WINDOW = 7200; // must match ScoreRegistry.CHALLENGE_WINDOW
 
 /**
  * Finalization job. For every pending proposal whose challenge window has
- * closed without a dispute, call `ScoreRegistry.finalizeScore(popId)`. The
+ * closed without a dispute, call `ScoreRegistry.finalizeScore(account)`. The
  * call is permissionless — anyone can finalize — but the indexer does it
  * proactively so external consumers see the published score promptly.
  */
@@ -21,14 +21,14 @@ export async function runFinalizationJob() {
     try {
       // Paranoid on-chain re-check — our DB might disagree with chain state.
       const canFinalize = await (contracts.scoreRegistry as any).canFinalize(
-        // We don't have popId in the row — fetch via join
-        (await fetchPopId(row.id)) ?? null
+        // We don't have account in the row — fetch via join
+        (await fetchAccount(row.id)) ?? null
       );
       if (!canFinalize) continue;
 
-      const popId = await fetchPopId(row.id);
-      if (!popId) continue;
-      const { block } = await chain.finalizeScore(popId);
+      const account = await fetchAccount(row.id);
+      if (!account) continue;
+      const { block } = await chain.finalizeScore(account);
       queries.markProposalFinalized.run(block, row.on_chain_id);
     } catch (e) {
       log.error(
@@ -40,11 +40,11 @@ export async function runFinalizationJob() {
 }
 
 import { db } from "../db/index.js";
-async function fetchPopId(proposalRowId: number): Promise<string | null> {
+async function fetchAccount(proposalRowId: number): Promise<string | null> {
   const row = db
-    .prepare<[number], { pop_id: string }>(
-      "SELECT pop_id FROM score_proposals WHERE id = ?"
+    .prepare<[number], { account: string }>(
+      "SELECT account FROM score_proposals WHERE id = ?"
     )
     .get(proposalRowId);
-  return row?.pop_id ?? null;
+  return row?.account ?? null;
 }

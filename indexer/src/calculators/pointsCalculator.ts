@@ -37,14 +37,14 @@ export type ReasonCode =
 export interface EventInput {
   source: "polkacredit" | "opengov";
   event_type: string;
-  pop_id: string;
+  account: string;
   block_number: number;
   block_timestamp: number;
   data: Record<string, any>;
 }
 
 export interface PointAward {
-  pop_id: string;
+  account: string;
   amount: number;
   reason: ReasonCode;
   block_number: number;
@@ -159,7 +159,7 @@ export function scoreSingleEvent(
   ctx: ScoringContext
 ): PointAward | null {
   const make = (amount: number, reason: ReasonCode): PointAward => ({
-    pop_id: ev.pop_id,
+    account: ev.account,
     amount,
     reason,
     block_number: ev.block_number,
@@ -276,16 +276,16 @@ export function scoreSingleEvent(
 }
 
 /**
- * Given all events for every popId, compute the running point total.
+ * Given all events for every account, compute the running point total.
  * Reference implementation for the verifier script and for offline
  * reproducibility checks against on-chain scores.
  */
 export function computePoints(events: EventInput[], currentBlock: number): number {
   const byPop = new Map<string, EventInput[]>();
   for (const ev of events) {
-    const list = byPop.get(ev.pop_id) ?? [];
+    const list = byPop.get(ev.account) ?? [];
     list.push(ev);
-    byPop.set(ev.pop_id, list);
+    byPop.set(ev.account, list);
   }
 
   let total = 0;

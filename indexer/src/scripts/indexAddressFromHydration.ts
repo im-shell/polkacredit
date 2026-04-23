@@ -195,7 +195,7 @@ async function main() {
   }
   console.log("");
 
-  const popId = addrHex;
+  const account = addrHex;
   const synthetic: EventInput[] = [];
 
   // 1) staking.StakeAdded → Staked (once)
@@ -205,7 +205,7 @@ async function main() {
       synthetic.push({
         source: "polkacredit",
         event_type: "Staked",
-        pop_id: popId,
+        account: account,
         block_number: m.block,
         block_timestamp: Math.floor((m.timestampMs ?? 0) / 1000),
         data: {},
@@ -233,7 +233,7 @@ async function main() {
     synthetic.push({
       source: "opengov",
       event_type: "Voted",
-      pop_id: popId,
+      account: account,
       block_number: m.block,
       block_timestamp: Math.floor((m.timestampMs ?? 0) / 1000),
       data: { conviction, dotCommitted: balanceHdx },
@@ -257,7 +257,7 @@ async function main() {
         synthetic.push({
           source: "polkacredit",
           event_type: "TransferVolumeThreshold",
-          pop_id: popId,
+          account: account,
           block_number: m.block,
           block_timestamp: Math.floor((m.timestampMs ?? 0) / 1000),
           data: { band },
@@ -303,7 +303,7 @@ async function main() {
         capturedAt: new Date().toISOString(),
         source: WSS,
         address: ADDRESS,
-        popId,
+        account,
         window: { fromBlock: from, toBlock: headNumber, blockCount: BLOCKS },
         pricing: { hdxUsd: HDX_USD, openGovMinHdx: OPENGOV_MIN },
         rawMatches: matched,

@@ -13,7 +13,7 @@ import {
   type Eip1193,
   type WalletKind,
 } from "./lib/wallet";
-import { short } from "./lib/popId";
+import { short } from "./lib/address";
 import { Connect } from "./components/Connect";
 import { ScoreCard } from "./components/ScoreCard";
 import { StakeCard } from "./components/StakeCard";

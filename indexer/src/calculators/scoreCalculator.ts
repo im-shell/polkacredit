@@ -38,13 +38,13 @@ export const ALGORITHM_VERSION_ID = 2;
  * hash as a verification check.
  */
 export function computationHash(
-  popId: string,
+  account: string,
   totalPoints: number,
   blockNumber: number
 ): string {
   const h = createHash("sha256");
   h.update(ALGORITHM_VERSION);
-  h.update(popId);
+  h.update(account);
   h.update(String(totalPoints));
   h.update(String(blockNumber));
   return "0x" + h.digest("hex");

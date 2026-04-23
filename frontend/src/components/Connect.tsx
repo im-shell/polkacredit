@@ -1,4 +1,4 @@
-import { short } from "../lib/popId";
+import { short } from "../lib/address";
 import type { WalletKind } from "../lib/wallet";
 
 export function Connect({

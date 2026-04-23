@@ -7,8 +7,8 @@ import { log } from "../util/log.js";
  * Listens to PolkaCredit contract events on the EVM chain and mirrors them
  * into the indexer DB. Identities are discovered implicitly — the first time
  * we see a Staked / VouchCreated / PointsMinted event for an EVM address we
- * upsert a pop_identities row. The column name `pop_id` is historical
- * (predates the PopId.sol removal); stored values are plain 20-byte EVM
+ * upsert a accountentities row. The column name `account` is historical
+ * (predates the Account.sol removal); stored values are plain 20-byte EVM
  * addresses throughout the pipeline.
  */
 
@@ -240,7 +240,7 @@ function handle(ev: Decoded, addr: Addresses) {
       const claimType = claimTypeMap[Number(ev.args.claimType)] ?? "unknown";
       if (account) {
         // Look up the local proposal row id for FK.
-        const prop = queries.getLatestProposalByPop.get(account);
+        const prop = queries.getLatestProposalByAccount.get(account);
         if (prop && prop.on_chain_id === proposalOnChainId) {
           queries.insertDispute.run(
             disputeOnChainId,
@@ -277,10 +277,10 @@ function handle(ev: Decoded, addr: Addresses) {
 
 function ensureIdentity(account: string, blockNumber: number) {
   // `account` is the ethers-decoded address — already EIP-55 checksummed,
-  // which is our canonical storage form. The `pop_id` column name is
-  // historical (dates to the deleted PopId.sol); the value stored is a
+  // which is our canonical storage form. The `account` column name is
+  // historical (dates to the deleted Account.sol); the value stored is a
   // plain 20-byte address, same as `evm_address`.
-  queries.upsertIdentity.run(account, account.toLowerCase(), blockNumber, 1);
+  queries.upsertAccount.run(account, account.toLowerCase(), blockNumber, 1);
 }
 
 function insertRaw(

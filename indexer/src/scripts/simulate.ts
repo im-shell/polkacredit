@@ -29,7 +29,7 @@ const nextBlock = (): number => (BLOCK += 100);
 type EventInit = {
   source: "polkacredit" | "opengov";
   event_type: string;
-  pop_id: string;
+  account: string;
   data?: Record<string, unknown>;
   block_number?: number;
 };
@@ -37,20 +37,20 @@ type EventInit = {
 const ev = (e: EventInit): EventInput => ({
   source: e.source,
   event_type: e.event_type,
-  pop_id: e.pop_id,
+  account: e.account,
   block_number: e.block_number ?? nextBlock(),
   block_timestamp: 0,
   data: (e.data ?? {}) as Record<string, unknown>,
 });
 
 const staked = (pop: string): EventInput =>
-  ev({ source: "polkacredit", event_type: "Staked", pop_id: pop });
+  ev({ source: "polkacredit", event_type: "Staked", account: pop });
 
 const voted = (pop: string, conviction = 1, dotCommitted = 5): EventInput =>
   ev({
     source: "opengov",
     event_type: "Voted",
-    pop_id: pop,
+    account: pop,
     data: { conviction, dotCommitted },
   });
 
@@ -58,7 +58,7 @@ const vouchOpened = (pop: string, committedStake: number): EventInput =>
   ev({
     source: "polkacredit",
     event_type: "VouchOpened_vouchee",
-    pop_id: pop,
+    account: pop,
     data: { committedStake },
   });
 
@@ -66,7 +66,7 @@ const vouchResolvedOk = (pop: string, committedStake: number): EventInput =>
   ev({
     source: "polkacredit",
     event_type: "VouchResolvedSuccess_voucher",
-    pop_id: pop,
+    account: pop,
     data: { committedStake },
   });
 
@@ -74,7 +74,7 @@ const vouchResolvedFailVouchee = (pop: string, credited: number): EventInput =>
   ev({
     source: "polkacredit",
     event_type: "VouchResolvedFail_vouchee",
-    pop_id: pop,
+    account: pop,
     data: { creditedAmount: credited },
   });
 
@@ -82,7 +82,7 @@ const vouchResolvedFailVoucher = (pop: string, credited: number): EventInput =>
   ev({
     source: "polkacredit",
     event_type: "VouchResolvedFail_voucher",
-    pop_id: pop,
+    account: pop,
     data: { creditedAmount: credited },
   });
 
@@ -90,7 +90,7 @@ const transferBand = (pop: string, band: number): EventInput =>
   ev({
     source: "polkacredit",
     event_type: "TransferVolumeThreshold",
-    pop_id: pop,
+    account: pop,
     data: { band },
   });
 
@@ -98,12 +98,12 @@ const loanRepaid = (pop: string, band: number): EventInput =>
   ev({
     source: "polkacredit",
     event_type: "LoanRepaid",
-    pop_id: pop,
+    account: pop,
     data: { band },
   });
 
 const loanDefault = (pop: string): EventInput =>
-  ev({ source: "polkacredit", event_type: "LoanDefaulted", pop_id: pop });
+  ev({ source: "polkacredit", event_type: "LoanDefaulted", account: pop });
 
 // ─────────────────────── personas ───────────────────────
 
@@ -262,7 +262,7 @@ const makeIdle = (): Persona => {
   const pop = "IDLE";
   const stakeBlock = nextBlock();
   const es: EventInput[] = [
-    ev({ source: "polkacredit", event_type: "Staked", pop_id: pop, block_number: stakeBlock }),
+    ev({ source: "polkacredit", event_type: "Staked", account: pop, block_number: stakeBlock }),
   ];
   // currentBlock = stake + 125 days → 90-day grace + 35 days → floor(35/7) = 5 weeks.
   const currentBlock = stakeBlock + 125 * BLOCKS_PER_DAY;

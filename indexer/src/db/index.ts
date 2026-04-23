@@ -14,10 +14,10 @@ db.pragma("foreign_keys = ON");
 const schemaSql = fs.readFileSync(path.join(__dirname, "schema.sql"), "utf8");
 db.exec(schemaSql);
 
-export type PopId = string; // 0x-prefixed 32-byte hex
+export type Account = string; // 0x-prefixed lowercase H160
 
 export interface PointBalanceRow {
-  pop_id: PopId;
+  account: Account;
   total_points: number;
   earned_points: number;
   burned_points: number;
@@ -29,7 +29,7 @@ export interface RawEventRow {
   id: number;
   source: string;
   event_type: string;
-  pop_id: PopId | null;
+  account: Account | null;
   wallet_address: string | null;
   chain_id: number | null;
   block_number: number;
@@ -51,35 +51,31 @@ export const queries = {
       "ON CONFLICT(source) DO UPDATE SET last_block = excluded.last_block, last_updated = strftime('%s','now')"
   ),
 
-  // ─── identity ───
-  upsertIdentity: db.prepare(
-    "INSERT INTO pop_identities (pop_id, evm_address, registered_at, dim_level) VALUES (?, ?, ?, ?) " +
-      "ON CONFLICT(pop_id) DO UPDATE SET evm_address = excluded.evm_address"
+  // ─── accounts ───
+  upsertAccount: db.prepare(
+    "INSERT INTO accounts (account, evm_address, registered_at) VALUES (?, ?, ?) " +
+      "ON CONFLICT(account) DO UPDATE SET evm_address = excluded.evm_address"
   ),
-  getAllIdentities: db.prepare<[], { pop_id: string; evm_address: string | null }>(
-    "SELECT pop_id, evm_address FROM pop_identities WHERE is_active = 1"
-  ),
-
-  getPopIdForEvmAddress: db.prepare<[string], { pop_id: string }>(
-    "SELECT pop_id FROM pop_identities WHERE evm_address = ? AND is_active = 1"
+  getAllAccounts: db.prepare<[], { account: string; evm_address: string | null }>(
+    "SELECT account, evm_address FROM accounts WHERE is_active = 1"
   ),
 
   // ─── raw events ───
   insertRawEvent: db.prepare(
     `INSERT OR IGNORE INTO raw_events
-      (source, event_type, pop_id, wallet_address, chain_id, block_number, block_timestamp,
+      (source, event_type, account, wallet_address, chain_id, block_number, block_timestamp,
        data, points_awarded, reason_code, tx_hash, log_index)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ),
 
   // ─── balances ───
-  getBalance: db.prepare<[PopId], PointBalanceRow>(
-    "SELECT * FROM point_balances WHERE pop_id = ?"
+  getBalance: db.prepare<[Account], PointBalanceRow>(
+    "SELECT * FROM point_balances WHERE account = ?"
   ),
   upsertBalance: db.prepare(
-    `INSERT INTO point_balances (pop_id, total_points, earned_points, burned_points, locked_points, last_updated)
+    `INSERT INTO point_balances (account, total_points, earned_points, burned_points, locked_points, last_updated)
      VALUES (?, ?, ?, ?, ?, ?)
-     ON CONFLICT(pop_id) DO UPDATE SET
+     ON CONFLICT(account) DO UPDATE SET
        total_points = excluded.total_points,
        earned_points = excluded.earned_points,
        burned_points = excluded.burned_points,
@@ -88,32 +84,32 @@ export const queries = {
   ),
 
   // ─── monthly caps ───
-  bumpMonthlyCap: (popId: string, yearMonth: string, column: string) => {
+  bumpMonthlyCap: (account: string, yearMonth: string, column: string) => {
     db.exec(
-      `INSERT INTO monthly_caps (pop_id, year_month, ${column}) VALUES ('${popId}', '${yearMonth}', 1)
-       ON CONFLICT(pop_id, year_month) DO UPDATE SET ${column} = ${column} + 1`
+      `INSERT INTO monthly_caps (account, year_month, ${column}) VALUES ('${account}', '${yearMonth}', 1)
+       ON CONFLICT(account, year_month) DO UPDATE SET ${column} = ${column} + 1`
     );
   },
   getMonthlyCap: db.prepare<[string, string], Record<string, number>>(
-    "SELECT opengov_points, vouches_made FROM monthly_caps WHERE pop_id = ? AND year_month = ?"
+    "SELECT opengov_points, vouches_made FROM monthly_caps WHERE account = ? AND year_month = ?"
   ),
 
   // ─── score history ───
   insertScore: db.prepare(
-    `INSERT INTO score_history (pop_id, score, total_points, computed_at, computation_hash)
+    `INSERT INTO score_history (account, score, total_points, computed_at, computation_hash)
      VALUES (?, ?, ?, ?, ?)`
   ),
   updateScorePublishedTx: db.prepare(
     "UPDATE score_history SET published_tx = ? WHERE id = ?"
   ),
   getLatestScore: db.prepare<[string], { score: number; computed_at: number; total_points: number }>(
-    "SELECT score, computed_at, total_points FROM score_history WHERE pop_id = ? ORDER BY computed_at DESC LIMIT 1"
+    "SELECT score, computed_at, total_points FROM score_history WHERE account = ? ORDER BY computed_at DESC LIMIT 1"
   ),
 
   // ─── proposals / disputes ───
   insertProposal: db.prepare(
     `INSERT INTO score_proposals
-       (on_chain_id, pop_id, score, total_points,
+       (on_chain_id, account, score, total_points,
         source_block_height, proposed_at_block, status, tx_hash)
      VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`
   ),
@@ -129,7 +125,7 @@ export const queries = {
   markProposalRejected: db.prepare(
     "UPDATE score_proposals SET status = 'rejected' WHERE on_chain_id = ?"
   ),
-  getPendingProposalByPop: db.prepare<[string], {
+  getPendingProposalByAccount: db.prepare<[string], {
     id: number;
     on_chain_id: number;
     score: number;
@@ -137,9 +133,9 @@ export const queries = {
     proposed_at_block: number;
     status: string;
   }>(
-    "SELECT id, on_chain_id, score, total_points, proposed_at_block, status FROM score_proposals WHERE pop_id = ? AND status = 'pending' ORDER BY id DESC LIMIT 1"
+    "SELECT id, on_chain_id, score, total_points, proposed_at_block, status FROM score_proposals WHERE account = ? AND status = 'pending' ORDER BY id DESC LIMIT 1"
   ),
-  getLatestProposalByPop: db.prepare<[string], {
+  getLatestProposalByAccount: db.prepare<[string], {
     id: number;
     on_chain_id: number;
     score: number;
@@ -149,19 +145,19 @@ export const queries = {
     status: string;
     tx_hash: string | null;
   }>(
-    "SELECT id, on_chain_id, score, total_points, proposed_at_block, finalized_at_block, status, tx_hash FROM score_proposals WHERE pop_id = ? ORDER BY id DESC LIMIT 1"
+    "SELECT id, on_chain_id, score, total_points, proposed_at_block, finalized_at_block, status, tx_hash FROM score_proposals WHERE account = ? ORDER BY id DESC LIMIT 1"
   ),
   listPendingReadyToFinalize: db.prepare<[number], {
     id: number;
     on_chain_id: number;
-    pop_id: string;
+    account: string;
     proposed_at_block: number;
   }>(
-    "SELECT id, on_chain_id, pop_id, proposed_at_block FROM score_proposals WHERE status = 'pending' AND proposed_at_block + ? <= (SELECT MAX(last_block) FROM indexer_state WHERE source = 'polkacredit')"
+    "SELECT id, on_chain_id, account, proposed_at_block FROM score_proposals WHERE status = 'pending' AND proposed_at_block + ? <= (SELECT MAX(last_block) FROM indexer_state WHERE source = 'polkacredit')"
   ),
 
   insertDispute: db.prepare(
-    `INSERT INTO disputes (on_chain_id, proposal_id, pop_id, disputer, claim_type)
+    `INSERT INTO disputes (on_chain_id, proposal_id, account, disputer, claim_type)
      VALUES (?, ?, ?, ?, ?)`
   ),
   resolveDisputeDb: db.prepare(

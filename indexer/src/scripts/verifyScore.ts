@@ -1,12 +1,12 @@
 /**
- * Independent score verifier. Reads all raw_events for a popId from the
+ * Independent score verifier. Reads all raw_events for a account from the
  * indexer's DB (or, if run by a third party, pulled from the public API or
  * by replaying on-chain events), re-runs the scoring algorithm, and checks
- * that the on-chain ScoreRegistry.getFullScore(popId).computationHash
+ * that the on-chain ScoreRegistry.getFullScore(account).computationHash
  * matches what we compute.
  *
  * Usage:
- *   tsx src/scripts/verifyScore.ts <popId>
+ *   tsx src/scripts/verifyScore.ts <account>
  */
 
 import { db } from "../db/index.js";
@@ -15,25 +15,25 @@ import { computePoints } from "../calculators/pointsCalculator.js";
 import { computeScore, computationHash } from "../calculators/scoreCalculator.js";
 
 async function main() {
-  const popId = process.argv[2];
-  if (!popId) {
-    console.error("usage: tsx src/scripts/verifyScore.ts <popId>");
+  const account = process.argv[2];
+  if (!account) {
+    console.error("usage: tsx src/scripts/verifyScore.ts <account>");
     process.exit(1);
   }
 
   const rows = db
     .prepare(
-      `SELECT source, event_type, pop_id, block_number, block_timestamp, data
+      `SELECT source, event_type, account, block_number, block_timestamp, data
        FROM raw_events
-       WHERE pop_id = ?
+       WHERE account = ?
        ORDER BY block_number ASC`
     )
-    .all(popId) as Array<any>;
+    .all(account) as Array<any>;
 
   const events = rows.map((r) => ({
     source: r.source,
     event_type: r.event_type,
-    pop_id: r.pop_id,
+    account: r.account,
     block_number: r.block_number,
     block_timestamp: r.block_timestamp,
     data: JSON.parse(r.data),
@@ -42,14 +42,14 @@ async function main() {
   const head = await contracts.pointsLedger.runner!.provider!.getBlockNumber();
   const computed = computePoints(events, head);
   const score = computeScore(computed);
-  const hash = computationHash(popId, computed, head);
+  const hash = computationHash(account, computed, head);
 
-  const full = (await (contracts.scoreRegistry as any).getFullScore(popId)) as any;
+  const full = (await (contracts.scoreRegistry as any).getFullScore(account)) as any;
   const onChainScore = Number(full.score);
   const onChainHash = full.computationHash as string;
 
   console.log("───────────────────────────────────────");
-  console.log(` popId             : ${popId}`);
+  console.log(` account             : ${account}`);
   console.log(` events considered : ${events.length}`);
   console.log(` computed points   : ${computed}`);
   console.log(` computed score    : ${score}`);

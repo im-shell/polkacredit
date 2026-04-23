@@ -6,13 +6,13 @@
  *   1. Build a time-ordered event stream (block numbers advance with the
  *      persona's real-world timeline: stake → vouches → gov → loans).
  *   2. Run the indexer's pure pointsCalculator to get points + score.
- *   3. Submit proposeScore(popId, score, points, …) to the deployed
+ *   3. Submit proposeScore(account, score, points, …) to the deployed
  *      ScoreRegistry using the authorised indexer key.
  *   4. Query on-chain ScoreRegistry.computeScore(points) and
- *      getPendingProposal(popId), and assert all three agree.
+ *      getPendingProposal(account), and assert all three agree.
  *   5. If the RPC supports anvil_mine (i.e. we're on anvil, not zombienet),
- *      fast-forward past CHALLENGE_WINDOW, call finalizeScore(popId) for
- *      every persona, and verify getScore(popId) returns the expected
+ *      fast-forward past CHALLENGE_WINDOW, call finalizeScore(account) for
+ *      every persona, and verify getScore(account) returns the expected
  *      finalized score. On zombienet this phase is skipped.
  *
  * Run with:    npx tsx src/scripts/simulateE2E.ts
@@ -95,7 +95,7 @@ const mk = (
 ): EventInput => ({
   source,
   event_type,
-  pop_id: pop,
+  account: pop,
   block_number,
   block_timestamp: 0,
   data,
@@ -203,9 +203,9 @@ function buildIdle(): PersonaInit {
   return { id: pop, addr, events: es, currentBlock, expectedPoints: 75, expectedScore: 75, summary: "stake and vanish for 125 days; 5 weeks inactivity past grace" };
 }
 
-// The contract takes `address` directly — popId is the EIP-55 checksummed
+// The contract takes `address` directly — account is the EIP-55 checksummed
 // EVM address. Kept as a helper for readability of call sites below.
-function addrToPopId(addr: string): string {
+function addrToAccount(addr: string): string {
   return ethers.getAddress(addr);
 }
 
@@ -288,7 +288,7 @@ async function main() {
 
   type Row = {
     persona: PersonaInit;
-    popId: string;
+    account: string;
     pts: number;
     s: number;
     onchainScore: number;
@@ -300,11 +300,11 @@ async function main() {
   for (const p of personas) {
     const pts = computePoints(p.events, p.currentBlock);
     const s = computeScoreTS(pts);
-    const popId = addrToPopId(p.addr);
+    const account = addrToAccount(p.addr);
     const sourceBlockHeight = await provider.getBlockNumber();
 
     const tx = await score.proposeScore(
-      popId,
+      account,
       s,
       pts,
       p.events.length,
@@ -314,12 +314,12 @@ async function main() {
     await tx.wait(1);
 
     const onchainScore = Number(await score.computeScore(pts));
-    const pending = await score.getPendingProposal(popId);
+    const pending = await score.getPendingProposal(account);
     const pendingScore = Number(pending.score);
 
     rows.push({
       persona: p,
-      popId,
+      account,
       pts,
       s,
       onchainScore,
@@ -353,13 +353,13 @@ async function main() {
     console.log(W2.map((w) => "─".repeat(w)).join("─┼─"));
 
     for (const row of rows) {
-      const canFin = (await score.canFinalize(row.popId)) as boolean;
+      const canFin = (await score.canFinalize(row.account)) as boolean;
       assert.ok(canFin, `canFinalize false for ${row.persona.id}`);
 
-      const tx = await score.finalizeScore(row.popId);
+      const tx = await score.finalizeScore(row.account);
       await tx.wait(1);
 
-      const [sc, updatedAt] = (await score.getScore(row.popId)) as [
+      const [sc, updatedAt] = (await score.getScore(row.account)) as [
         bigint,
         bigint
       ];

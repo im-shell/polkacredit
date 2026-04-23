@@ -16,16 +16,16 @@ const CACHE_REFRESH_BLOCKS = 50;
  *
  * Forward-keyed attribution:
  *
- *   for each PolkaCredit popId (H160):
+ *   for each PolkaCredit account (H160):
  *     canonical AccountId32 =
  *         revive.originalAccount[h160]        (if the user called map_account)
  *      OR h160 ++ 0xEE*12                     (default pallet-revive padding)
  *
- * We build a `canonical → popId` map from the `pop_identities` table and
+ * We build a `canonical → account` map from the `accountentities` table and
  * attribute any vote whose voter appears in it. No reverse lookup, no
  * stripping, no event side-table. Users who never interact with PolkaCredit
- * contracts never appear in `pop_identities`, so their OpenGov votes are
- * correctly ignored (no popId to credit).
+ * contracts never appear in `accountentities`, so their OpenGov votes are
+ * correctly ignored (no account to credit).
  */
 export async function runOpenGovListener(signal?: AbortSignal) {
   if (!config.openGov.enabled) {
@@ -42,12 +42,12 @@ export async function runOpenGovListener(signal?: AbortSignal) {
   }
   log.info(`opengov: subscribed to ${config.openGov.wss}`);
 
-  let canonicalToPopId = new Map<string, string>();
+  let canonicalToAccount = new Map<string, string>();
   let lastRefreshBlock = -Infinity;
   let cachedIdentityCount = -1;
 
   async function refreshCanonicalIndex(blockNumber: number) {
-    const rows = queries.getAllIdentities.all();
+    const rows = queries.getAllAccounts.all();
     const identityCount = rows.length;
     const stale =
       blockNumber - lastRefreshBlock >= CACHE_REFRESH_BLOCKS ||
@@ -61,7 +61,7 @@ export async function runOpenGovListener(signal?: AbortSignal) {
         .map(async (r) => {
           try {
             const canonical = await canonicalAccountId32FromH160(api, r.evm_address!);
-            next.set(canonical, r.pop_id);
+            next.set(canonical, r.account);
           } catch (e) {
             log.error(
               `opengov: canonical resolution failed for ${r.evm_address}: ${(e as Error).message}`
@@ -69,11 +69,11 @@ export async function runOpenGovListener(signal?: AbortSignal) {
           }
         })
     );
-    canonicalToPopId = next;
+    canonicalToAccount = next;
     lastRefreshBlock = blockNumber;
     cachedIdentityCount = identityCount;
     log.info(
-      `opengov: canonical cache refreshed at #${blockNumber} (${next.size} popIds)`
+      `opengov: canonical cache refreshed at #${blockNumber} (${next.size} accounts)`
     );
   }
 
@@ -92,10 +92,10 @@ export async function runOpenGovListener(signal?: AbortSignal) {
         events.forEach((record: any) => {
           const { event } = record;
           if (event.section !== "convictionVoting" || event.method !== "Voted") return;
-          const [account, pollIndex, vote] = event.data;
-          const voterHex = account.toHex().toLowerCase();
-          const popId = canonicalToPopId.get(voterHex);
-          if (!popId) return;
+          const [voter, pollIndex, vote] = event.data;
+          const voterHex = voter.toHex().toLowerCase();
+          const account = canonicalToAccount.get(voterHex);
+          if (!account) return;
 
           const voteJson = vote.toJSON();
           const standard = voteJson?.standard;
@@ -105,7 +105,7 @@ export async function runOpenGovListener(signal?: AbortSignal) {
           queries.insertRawEvent.run(
             SOURCE,
             "Voted",
-            popId,
+            account,
             voterHex,
             config.evm.chainId,
             blockNumber,

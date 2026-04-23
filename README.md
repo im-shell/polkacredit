@@ -20,10 +20,14 @@ Contracts are Solidity on Polkadot Hub (chain id `420420419`) and Passet Hub
 exposes a PVM (PolkaVM / RISC-V) backend for perf-critical paths. I considered
 ink! but EVM tooling was faster to get to a working MVP.
 
-Identity is "every EVM address is a popId" for now. The `popId` is just
-`bytes32(uint256(uint160(addr)))`. When a real PoP primitive lands on
-Polkadot, this becomes a registry lookup — there's a single call site to
-change.
+Identity in the MVP is just the caller's EVM wallet address. Every
+contract function that needs a user id takes an `address` directly; the
+indexer and frontend use the same hex string and refer to it as
+`account` throughout. When a real Proof-of-Personhood primitive lands on
+Polkadot, a dedicated identity column and a registry mapping
+personhood-id → accounts will get bolted on. Until then there's no such
+thing in this repo — the personhood id is NOT just the wallet address
+zero-padded to 32 bytes.
 
 Cross-chain linking is handled by pallet-revive itself: H160 ↔ AccountId32 is
 stateless (0xEE-suffix padding), and the `map_account` extrinsic exists for
@@ -74,7 +78,7 @@ frontend/    # Vite + React dApp
 - `ScoreRegistry.sol` — optimistic score snapshot. The indexer calls
   `proposeScore` anchored to a `sourceBlockHeight`; after the challenge
   window, anyone calls `finalizeScore`. External readers hit
-  `getScore(popId)` and only see finalized values.
+  `getScore(account)` and only see finalized values.
 - `DisputeResolver.sol` — bonded challenges against pending proposals.
   `WrongArithmetic` and `WrongTotalPointsSum` auto-resolve on-chain.
   `MissingEvent` / `InvalidEvent` route to governance, with an on-chain
@@ -106,11 +110,11 @@ frontend/    # Vite + React dApp
   once each vouch's window plus grace period has passed, so users never
   have to think about it.
 - `api/server.ts` — REST surface for verifiers:
-  `/api/v1/score/:popId/events` and
-  `/api/v1/score/:popId/proposal/latest`. Run the calculator against
+  `/api/v1/score/:account/events` and
+  `/api/v1/score/:account/proposal/latest`. Run the calculator against
   those, file a dispute if you get a different answer.
-- `scripts/verifyScore.ts` — independent verifier; recomputes a popId's
-  score from the raw event log and compares against the chain.
+- `scripts/verifyScore.ts` — independent verifier; recomputes an
+  account's score from the raw event log and compares against the chain.
 - `scripts/indexAddressFromHydration.ts` — ad-hoc scorer for a live SS58
   address on Hydration. Useful to answer "what would this user's score
   be if PolkaCredit had existed?" — see the section below.
@@ -199,10 +203,10 @@ npm run dev
 
 The indexer boots a REST API on `http://127.0.0.1:4000` with:
 
-- `GET /score/:popId` — on-chain score + local history
-- `GET /balance/:popId` — live ledger balance
-- `GET /events/:popId` — raw event log
-- `GET /identity/:evmAddress` — popId lookup
+- `GET /score/:account` — on-chain score + local history
+- `GET /balance/:account` — live ledger balance
+- `GET /events/:account` — raw event log
+- `GET /identity/:evmAddress` — account lookup
 
 ### 4. Run the frontend
 
@@ -233,7 +237,7 @@ URL is live, add it to the "Deployed" table at the top of this README.
 
 ```bash
 cd indexer
-npx tsx src/scripts/verifyScore.ts <popId>
+npx tsx src/scripts/verifyScore.ts <account>
 ```
 
 Re-runs the scoring algorithm from the raw event log and compares computed vs
@@ -279,11 +283,11 @@ on-chain score + computation hash.
 - Indexer mirrors every contract event into SQLite, including the full
   proposal lifecycle.
 - OpenGov listener attributes AssetHub `convictionVoting.Voted` events
-  back to an H160 popId via the 0xEE-padding rule.
+  back to an H160 wallet address via the 0xEE-padding rule.
 - Score job reads the authoritative ledger sum and proposes scores
   anchored to `head − 1`.
 - Finalization job auto-finalizes once the challenge window closes.
-- Verifier HTTP API at `/api/v1/score/:popId/{events,proposal/latest}` —
+- Verifier HTTP API at `/api/v1/score/:account/{events,proposal/latest}` —
   run the pure points calculator against those and file a dispute if the
   on-chain numbers don't match.
 - Frontend: stake/unstake, open-vouch, score card with
@@ -369,7 +373,7 @@ truth for code, and this section is just a summary.
 
 | Event                                                | Points                    | Cap                            |
 |------------------------------------------------------|---------------------------|--------------------------------|
-| First successful stake (6-month lock)                | +100                      | Once per popId                 |
+| First successful stake (6-month lock)                | +100                      | Once per account                 |
 | Vouch given, per vouch (by committed stake)          | +20 / +40 / +80           | +200 lifetime (truncated)      |
 | Vouch received (front-loaded at open)                | +20 / +40 / +80           | 3 distinct vouchers → +240     |
 | OpenGov vote (≥1× conviction, ≥5 DOT)                | +5                        | +50 (10 votes lifetime)        |
@@ -381,7 +385,7 @@ truth for code, and this section is just a summary.
 | Event                                 | Effect                                                                                 |
 |---------------------------------------|----------------------------------------------------------------------------------------|
 | Failed vouch (vouchee under +50 in window) | Voucher −2× amount actually credited + stake slash; vouchee −1× front-load        |
-| Self loan default                     | −100 flat + clawback of every active voucher's front-load to this popId                |
+| Self loan default                     | −100 flat + clawback of every active voucher's front-load to this account                |
 | Inactivity                            | After 90-day grace, **−5 pts/week, unbounded below** (no floor on points)              |
 
 ### Points → score
@@ -417,7 +421,7 @@ alone top out at ~633, pure social/governance/transfers at ~693).
 
 - Tier-flag memory doesn't decay the way score does. SPEC §3.3's
   `−5 pts/week` inactivity penalty drags a long-dormant score to 0, but
-  the "once per tier per popId" flags (loan tiers §2.6, first-stake §2.1,
+  the "once per tier per account" flags (loan tiers §2.6, first-stake §2.1,
   vouch uniqueness) are permanent. Someone who took a $1M loan a decade
   ago and went silent can't re-earn the loan-tier points by borrowing
   again today. Fix is a per-tier expiry that resets the claim bitmap
@@ -442,7 +446,7 @@ window:
    (~24 h). Events that produced the score already live on-chain in
    `PointsLedger._history[account]` — no off-chain commitment is needed.
 2. **Challenge window.** During those 24 hours anyone can:
-   - Call `GET /api/v1/score/:popId/events` on the indexer to fetch the
+   - Call `GET /api/v1/score/:account/events` on the indexer to fetch the
      raw event log and re-run the points calculator locally.
    - Disagree and post a $10 mUSD bond via
      `DisputeResolver.dispute(account, claimType, evidence)`.
@@ -474,10 +478,10 @@ Running your own verifier:
 
 ```bash
 # Fetch the raw event log and re-run the points calculator locally
-curl http://127.0.0.1:4000/api/v1/score/<popId>/events
+curl http://127.0.0.1:4000/api/v1/score/<account>/events
 
 # See the latest on-chain proposal for this account
-curl http://127.0.0.1:4000/api/v1/score/<popId>/proposal/latest
+curl http://127.0.0.1:4000/api/v1/score/<account>/proposal/latest
 ```
 
 The whole thing rests on at least one honest verifier being online. If

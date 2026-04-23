@@ -1,24 +1,15 @@
-import { queries } from "../db/index.js";
-import { ethers } from "ethers";
-
 /**
- * Given an EVM address on the PolkaCredit chain itself, look up the PoP id.
- */
-export function resolvePopIdFromEvm(address: string): string | null {
-  const row = queries.getPopIdForEvmAddress.get(address.toLowerCase());
-  return row?.pop_id ?? null;
-}
-
-/**
- * Mirror of the on-chain `PopId.fromAddress` library:
- *   popId = bytes32(uint256(uint160(addr)))
- * i.e. the address, zero-padded on the left to 32 bytes.
+ * Account identifiers used by the indexer are just the H160 wallet
+ * address, 0x-prefixed and lowercased. The term `account` matches the
+ * Solidity parameter name used across the contracts.
  *
- * Use this when the indexer needs to derive a popId without going through the
- * DB (for example, to seed lookups for an address it has never seen before).
+ * There used to be a separate `popId` concept here (see the deleted
+ * `contracts/lib/PopId.sol`) but the contract refactor dropped it —
+ * every on-chain signature now takes `address` directly, so the
+ * off-chain code standardises on that too.
  */
-export function popIdFromAddress(address: string): string {
-  return ethers.zeroPadValue(address.toLowerCase(), 32);
+export function normalizeAccount(address: string): string {
+  return address.toLowerCase();
 }
 
 /**

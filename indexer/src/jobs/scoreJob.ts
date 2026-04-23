@@ -23,18 +23,18 @@ import { log } from "../util/log.js";
  * `jobs/finalizationJob.ts`.
  */
 
-const SELECT_READY = db.prepare<[], { pop_id: string; last_updated: number }>(
-  `SELECT pop_id, last_updated
+const SELECT_READY = db.prepare<[], { account: string; last_updated: number }>(
+  `SELECT account, last_updated
      FROM point_balances
     WHERE last_updated > COALESCE(
             (SELECT MAX(proposed_at_block) FROM score_proposals
-              WHERE pop_id = point_balances.pop_id
+              WHERE account = point_balances.account
                 AND status IN ('pending','finalized')),
             0)`
 );
 
 const SELECT_SCORED_EVENT_COUNT = db.prepare<[string], { n: number }>(
-  `SELECT COUNT(*) AS n FROM raw_events WHERE pop_id = ? AND points_awarded != 0`
+  `SELECT COUNT(*) AS n FROM raw_events WHERE account = ? AND points_awarded != 0`
 );
 
 export async function runScoreJob() {
@@ -42,7 +42,7 @@ export async function runScoreJob() {
   if (rows.length === 0) return;
   log.info(`score job: ${rows.length} identities need proposal`);
 
-  for (const { pop_id: account } of rows) {
+  for (const { account: account } of rows) {
     try {
       await scoreOne(account);
     } catch (e) {

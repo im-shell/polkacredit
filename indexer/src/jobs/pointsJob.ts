@@ -22,11 +22,11 @@ import { log } from "../util/log.js";
 export async function processUnscoredEvents() {
   const rows = db
     .prepare(
-      `SELECT id, source, event_type, pop_id, block_number, block_timestamp, data
+      `SELECT id, source, event_type, account, block_number, block_timestamp, data
        FROM raw_events
        WHERE source = 'opengov'
          AND points_awarded = 0
-         AND pop_id IS NOT NULL
+         AND account IS NOT NULL
        ORDER BY block_number ASC, id ASC
        LIMIT 500`
     )
@@ -39,16 +39,16 @@ export async function processUnscoredEvents() {
 
   for (const r of rows) {
     const data = JSON.parse(r.data);
-    let ctx = ctxByPop.get(r.pop_id);
+    let ctx = ctxByPop.get(r.account);
     if (!ctx) {
-      ctx = loadContextForPop(r.pop_id);
-      ctxByPop.set(r.pop_id, ctx);
+      ctx = loadContextForPop(r.account);
+      ctxByPop.set(r.account, ctx);
     }
 
     const input: EventInput = {
       source: r.source as "opengov",
       event_type: r.event_type,
-      pop_id: r.pop_id,
+      account: r.account,
       block_number: r.block_number,
       block_timestamp: r.block_timestamp,
       data,
@@ -62,9 +62,9 @@ export async function processUnscoredEvents() {
 
     try {
       if (award.amount > 0) {
-        await chain.mintPoints(award.pop_id, award.amount, award.reason);
+        await chain.mintPoints(award.account, award.amount, award.reason);
       } else if (award.amount < 0) {
-        await chain.burnPoints(award.pop_id, Math.abs(award.amount), award.reason);
+        await chain.burnPoints(award.account, Math.abs(award.amount), award.reason);
       }
       db.prepare(
         "UPDATE raw_events SET points_awarded = ?, reason_code = ? WHERE id = ?"
@@ -82,23 +82,23 @@ export async function processUnscoredEvents() {
  * (points_awarded != 0) are replayed; unprocessed or rejected-sentinel
  * rows don't advance state.
  */
-function loadContextForPop(popId: string): ScoringContext {
+function loadContextForPop(account: string): ScoringContext {
   const prior = db
     .prepare(
-      `SELECT source, event_type, pop_id, block_number, block_timestamp, data
+      `SELECT source, event_type, account, block_number, block_timestamp, data
        FROM raw_events
-       WHERE pop_id = ?
+       WHERE account = ?
          AND points_awarded > 0
        ORDER BY block_number ASC, id ASC`
     )
-    .all(popId) as Array<any>;
+    .all(account) as Array<any>;
 
   const ctx: ScoringContext = { counters: {} };
   for (const r of prior) {
     const ev: EventInput = {
       source: r.source,
       event_type: r.event_type,
-      pop_id: r.pop_id,
+      account: r.account,
       block_number: r.block_number,
       block_timestamp: r.block_timestamp,
       data: JSON.parse(r.data),
